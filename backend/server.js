@@ -18,7 +18,10 @@ const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
 
 const mocktestRoute = require('./routes/ai/mocktest-route');
@@ -266,8 +269,8 @@ const PORT = process.env.PORT;
 sequelize.sync({ alter: true }).then(() => {
   console.log(' Database Success...connection established and tables synced.');
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  console.log(`Congrats... Server is live and running on port ${PORT}`);
+});
 }).catch(err => {
   console.error(' Database sync failed:', err);
 });
