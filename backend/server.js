@@ -31,7 +31,9 @@ const missionRoute  = require('./routes/ai/mission-route');
 app.use('/api/ai', mocktestRoute);
 app.use('/api/ai', chatRoute);
 app.use('/api/ai', missionRoute);
-
+app.get('/', (req, res) => {
+  res.status(200).send('SkillQuest API is live!');
+});
 const JWT_SECRET = process.env.JWT_SECRET || 'skillquest_secret_key';
 
 function authenticateToken(req, res, next) {
@@ -264,13 +266,13 @@ app.post('/api/mocktests', authenticateToken, async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 10000;
 
 sequelize.sync({ alter: true }).then(() => {
-  console.log(' Database Success...connection established and tables synced.');
-  app.listen(PORT, () => {
-  console.log(`Congrats... Server is live and running on port ${PORT}`);
-});
+  console.log('Database Success...connection established and tables synced.');
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is live and running on port ${PORT}`);
+  });
 }).catch(err => {
   console.error(' Database sync failed:', err);
 });
