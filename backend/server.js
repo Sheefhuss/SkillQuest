@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+require('dotenv').config();
 
 const sequelize = require('./config/database');
 
