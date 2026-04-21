@@ -32,6 +32,7 @@ leaderboards, and AI-powered personalised missions — making learning feel like
 ## Features Built
 
 **Core Learning**
+
         ● 6 skill tracks: Web Development, DSA & Algorithms,   System Design, Databases, DevOps, APIs & Integrations
         ● Each level has a video lesson, reading material (markdown), a 3-question quiz, and a coding challenge
         ● XP awarded at every step — watching, quizzing, completing challenges
