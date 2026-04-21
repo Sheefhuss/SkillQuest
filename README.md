@@ -98,7 +98,7 @@ DB_NAME=skillquest
 DB_USER=your_postgres_username
 DB_PASS=your_postgres_password
 JWT_SECRET=any_random_secret_string
-ANTHROPIC_API_KEY=your_claude_api_key
+GROQ_API_KEY=your_groq_api_key
 PORT=5000
 ```
 
