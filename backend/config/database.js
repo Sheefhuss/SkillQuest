@@ -2,8 +2,18 @@ const path = require('path');
 const { Sequelize } = require('sequelize');
 
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
+    },
+  },
+});
 
-const sequelize = new Sequelize(
+//For local one use this instead of above
+/** const sequelize = new Sequelize(
   process.env.DB_NAME,
   process.env.DB_USER,
   process.env.DB_PASSWORD,
@@ -20,5 +30,5 @@ const sequelize = new Sequelize(
     }
   }
 );
-
+**/
 module.exports = sequelize;
