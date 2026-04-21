@@ -1,0 +1,13 @@
+node_modules/
+Frontend/node_modules/
+Frontend/.env
+Frontend/..env
+backend/.env
+backend/..env
+backend/node_modules/
+.env
+.env.local
+.env.production
+Frontend/dist/
+*.loggit
+.DS_Store
