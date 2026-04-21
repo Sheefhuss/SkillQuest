@@ -24,7 +24,7 @@ leaderboards, and AI-powered personalised missions — making learning feel like
 - PostgreSQL
 
 **Third-party / APIs**
-- Grok Api — faster,free and powers the AI Tutor and AI Mission generation
+- Groq Api — faster,free and powers the AI Tutor and AI Mission generation
 - YouTube Embed — video lessons inside each level
 
 ---
