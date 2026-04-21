@@ -24,7 +24,7 @@ leaderboards, and AI-powered personalised missions — making learning feel like
 - PostgreSQL
 
 **Third-party / APIs**
-- Groq Api — faster,free and powers the AI Tutor and AI Mission generation
+- Grok Api — faster,free and powers the AI Tutor and AI Mission generation
 - YouTube Embed — video lessons inside each level
 
 ---
@@ -48,19 +48,23 @@ leaderboards, and AI-powered personalised missions — making learning feel like
         ● Global leaderboard: top 100 users by XP this week and all-time    
 
 **AI Features**
+
         ● AI Tutor — ask anything, get explanations, simplifications or harder problems
         ● AI Missions — personalised weekly quests tailored to your skill gaps **for pro user only**
         ● AI Mock Tests — 5 auto-generated questions per track with instant grading  **for pro user only**
 
 **Social**
+
          ● Global leaderboard (top 100)
          ● Activity feed — see what others are solving, levelling up, earning badges
 
 **Pro Plan**
+
          ● Free plan: 2 tracks, 10 AI tutor messages per day
          ● Pro plan: all 6 tracks, unlimited AI tutor, AI Missions, Mock Tests
 
 **Profile**
+
         ● display name and bio can be edited
         ● XP progress bar, stats overview present
         ● Badge showcase
