@@ -3,7 +3,7 @@ const router = express.Router();
 const Groq = require("groq-sdk");
 const DailyChallenge = require("../../models/DailyChallenge");
 const Submission = require("../../models/Submission");
-const User = require("../../models/User");
+const User = require("../../models/User"); 
 const jwt = require("jsonwebtoken");
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
