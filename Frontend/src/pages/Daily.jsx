@@ -2,8 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/apiClient";
 import { useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Swords, Clock, Crown, Zap, Sparkles, AlertTriangle } from "lucide-react";
+import { Swords, Clock, Crown, Zap, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -15,13 +14,15 @@ export default function Daily() {
   const [params] = useSearchParams();
   const weekly = params.get("w") === "1";
   const today = new Date().toISOString().split("T")[0];
-  
+
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: () => apiClient.get("/users/me") });
   const { data: list = [] } = useQuery({
-    queryKey: ["daily", today], queryFn: () => apiClient.get(`/daily?date=${today}`),
+    queryKey: ["daily", today],
+    queryFn: () => apiClient.get("/ai/daily"),
   });
   const { data: archive = [] } = useQuery({
-    queryKey: ["dailyArchive"], queryFn: () => apiClient.get("/daily/archive"),
+    queryKey: ["dailyArchive"],
+    queryFn: () => apiClient.get("/ai/daily/archive"),
   });
 
   const challenge = weekly ? list.find((d) => d.is_weekly) : list.find((d) => !d.is_weekly);
@@ -102,10 +103,13 @@ export default function Daily() {
         toast.success(`🏅 ${BADGES.hundred_club.name} unlocked!`);
       }
       updates.badges = newBadges;
-      
+
       await apiClient.patch("/users/me", updates);
       await apiClient.post("/feed", {
-        kind: "challenge", title: `Solved ${challenge.title}`, detail: `${timeTaken}s`, xp_gained: xpEarned,
+        kind: "challenge",
+        title: `Solved ${challenge.title}`,
+        detail: `${timeTaken}s`,
+        xp_gained: xpEarned,
       });
       toast.success(`+${xpEarned} XP earned!`);
     } else {
