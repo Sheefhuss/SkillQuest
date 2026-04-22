@@ -6,7 +6,8 @@ const Submission = sequelize.define('Submission', {
     type: DataTypes.STRING,
   },
   challenge_id: {
-    type: DataTypes.STRING,
+    type: DataTypes.INTEGER,
+},
   },
   code: {
     type: DataTypes.TEXT, 
