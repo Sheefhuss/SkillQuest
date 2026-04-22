@@ -1,34 +1,34 @@
+'use strict';
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
 const Submission = sequelize.define('Submission', {
   user_email: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING
   },
   challenge_id: {
-    type: DataTypes.INTEGER,
-},
+    type: DataTypes.INTEGER
   },
   code: {
-    type: DataTypes.TEXT, 
+    type: DataTypes.TEXT
   },
   attempts: {
     type: DataTypes.INTEGER,
-    defaultValue: 1,
+    defaultValue: 1
   },
   passed: {
     type: DataTypes.BOOLEAN,
-    defaultValue: false,
+    defaultValue: false
   },
   time_taken_seconds: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.INTEGER
   },
   xp_earned: {
     type: DataTypes.INTEGER,
-    defaultValue: 0,
+    defaultValue: 0
   },
   ai_feedback: {
-    type: DataTypes.TEXT,
+    type: DataTypes.TEXT
   }
 });
 
