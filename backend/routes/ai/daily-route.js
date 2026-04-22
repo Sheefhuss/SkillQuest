@@ -3,7 +3,7 @@ const router = express.Router();
 const Groq = require("groq-sdk");
 const DailyChallenge = require("../../models/DailyChallenge");
 const Submission = require("../../models/Submission");
-const User = require("../../models/User"); 
+const User = require("../../models/User");
 const jwt = require("jsonwebtoken");
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -45,37 +45,108 @@ const WEEKLY_POOL = [
   { title: "Event Emitter Class", difficulty: "Hard", prompt: "Implement EventEmitter with on(), off(), emit().\n\nExample:\nconst e = new EventEmitter();\ne.on('click', handler);\ne.emit('click', 'data');\ne.off('click', handler);", starter_code: "class EventEmitter {\n  constructor() {}\n  on(event, listener) {}\n  off(event, listener) {}\n  emit(event, ...args) {}\n}", expected_concepts: ["class", "map", "filter", "listeners"], xp_reward: 150 },
 ];
 
+// ✅ FIX: Safely parse expected_concepts whether it comes back as string or array from Neon
+function normalizeChallenge(c) {
+  const plain = c.toJSON ? c.toJSON() : { ...c };
+  if (typeof plain.expected_concepts === "string") {
+    try {
+      plain.expected_concepts = JSON.parse(plain.expected_concepts);
+    } catch {
+      plain.expected_concepts = plain.expected_concepts
+        .replace(/[\[\]"]/g, "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+  if (!Array.isArray(plain.expected_concepts)) plain.expected_concepts = [];
+  return plain;
+}
+
 async function getOrCreateToday() {
   const date = today();
-  const existing = await DailyChallenge.findAll({ where: { date } });
-  if (existing.length > 0) return existing;
 
-  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  // ✅ FIX: Check existing rows properly for Neon/PostgreSQL
+  const existing = await DailyChallenge.findAll({ where: { date } });
+  if (existing.length >= 2) return existing.map(normalizeChallenge);
+
+  // If only partial data exists (e.g. 1 row), clean it up and recreate
+  if (existing.length > 0) {
+    await DailyChallenge.destroy({ where: { date } });
+  }
+
+  const dayOfYear = Math.floor(
+    (new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000
+  );
   const daily = DAILY_POOL[dayOfYear % DAILY_POOL.length];
   const weekly = WEEKLY_POOL[Math.floor(dayOfYear / 7) % WEEKLY_POOL.length];
 
+  // ✅ FIX: Stringify expected_concepts for Neon if model uses TEXT/VARCHAR
+  // If your DailyChallenge model uses JSONB or ARRAY, remove JSON.stringify below
+  const toInsert = [
+    {
+      ...daily,
+      expected_concepts: JSON.stringify(daily.expected_concepts),
+      date,
+      is_weekly: false,
+    },
+    {
+      ...weekly,
+      expected_concepts: JSON.stringify(weekly.expected_concepts),
+      date,
+      is_weekly: true,
+    },
+  ];
+
   try {
-    return await DailyChallenge.bulkCreate([
-      { ...daily, date, is_weekly: false },
-      { ...weekly, date, is_weekly: true },
-    ]);
+    const created = await DailyChallenge.bulkCreate(toInsert);
+    return created.map(normalizeChallenge);
   } catch (err) {
-    console.warn("Pool insert failed, falling back to Groq:", err.message);
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: "Respond with valid JSON only. No markdown." },
-        { role: "user", content: 'Generate a Medium JS challenge as JSON: {"title":"...","difficulty":"Medium","prompt":"...with 2 examples","starter_code":"function solution(){}","expected_concepts":["a","b"],"xp_reward":75}' },
-      ],
-      temperature: 0.9,
-      max_tokens: 500,
-    });
-    const raw = completion.choices[0]?.message?.content || "{}";
-    const challenge = JSON.parse(raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
-    return await DailyChallenge.bulkCreate([
-      { ...challenge, date, is_weekly: false },
-      { ...WEEKLY_POOL[0], date, is_weekly: true },
-    ]);
+    // ✅ FIX: Log full error so Neon constraint issues are visible
+    console.error("bulkCreate failed:", err.message, err.parent?.message);
+
+    // Groq fallback
+    try {
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: "Respond with valid JSON only. No markdown." },
+          {
+            role: "user",
+            content:
+              'Generate a Medium JS challenge as JSON: {"title":"...","difficulty":"Medium","prompt":"...with 2 examples","starter_code":"function solution(){}","expected_concepts":["a","b"],"xp_reward":75}',
+          },
+        ],
+        temperature: 0.9,
+        max_tokens: 500,
+      });
+      const raw = completion.choices[0]?.message?.content || "{}";
+      const challenge = JSON.parse(
+        raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()
+      );
+      const created = await DailyChallenge.bulkCreate([
+        {
+          ...challenge,
+          expected_concepts: JSON.stringify(
+            Array.isArray(challenge.expected_concepts)
+              ? challenge.expected_concepts
+              : []
+          ),
+          date,
+          is_weekly: false,
+        },
+        {
+          ...WEEKLY_POOL[0],
+          expected_concepts: JSON.stringify(WEEKLY_POOL[0].expected_concepts),
+          date,
+          is_weekly: true,
+        },
+      ]);
+      return created.map(normalizeChallenge);
+    } catch (groqErr) {
+      console.error("Groq fallback also failed:", groqErr.message);
+      throw groqErr;
+    }
   }
 }
 
@@ -86,7 +157,8 @@ async function evaluateSubmission(code, challenge) {
       messages: [
         {
           role: "system",
-          content: "You are a code evaluator. Respond with valid JSON only. No markdown, no explanation outside JSON.",
+          content:
+            "You are a code evaluator. Respond with valid JSON only. No markdown, no explanation outside JSON.",
         },
         {
           role: "user",
@@ -117,14 +189,15 @@ Rules:
     });
 
     const raw = completion.choices[0]?.message?.content || "{}";
-    const result = JSON.parse(raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
+    const result = JSON.parse(
+      raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()
+    );
     return {
       passed: result.passed === true,
       feedback: result.feedback || "Evaluated.",
       score: result.score || 0,
     };
   } catch {
-    
     const hasConcept = (challenge.expected_concepts || []).some((c) =>
       code.toLowerCase().includes(c.toLowerCase())
     );
@@ -138,39 +211,46 @@ Rules:
   }
 }
 
+// GET /api/ai/daily — get today's challenges
 router.get("/daily", async (req, res) => {
   try {
-    res.json(await getOrCreateToday());
+    const challenges = await getOrCreateToday();
+    res.json(challenges);
   } catch (err) {
+    // ✅ FIX: Return full error message so frontend can debug
     console.error("Daily route error:", err?.message || err);
-    res.status(500).json({ error: "Failed to load daily challenge." });
+    res.status(500).json({ error: "Failed to load daily challenge.", detail: err?.message });
   }
 });
 
+// GET /api/ai/daily/archive — last 30 days
 router.get("/daily/archive", async (req, res) => {
   try {
     const archive = await DailyChallenge.findAll({
       order: [["date", "DESC"]],
       limit: 30,
     });
-    res.json(archive);
+    res.json(archive.map(normalizeChallenge));
   } catch (err) {
     res.status(500).json({ error: "Failed to load archive." });
   }
 });
 
+// ✅ FIX: This is the correct submit endpoint the frontend should call
+// POST /api/ai/daily/submit — AI-evaluated submission
 router.post("/daily/submit", async (req, res) => {
   const authUser = getUser(req);
   if (!authUser) return res.status(401).json({ error: "Not authenticated." });
 
-  const { challenge_id, code } = req.body;
+  const { challenge_id, code, start_time } = req.body;
   if (!challenge_id || !code?.trim()) {
     return res.status(400).json({ error: "challenge_id and code are required." });
   }
 
   try {
-    const challenge = await DailyChallenge.findByPk(challenge_id);
-    if (!challenge) return res.status(404).json({ error: "Challenge not found." });
+    const challengeRaw = await DailyChallenge.findByPk(challenge_id);
+    if (!challengeRaw) return res.status(404).json({ error: "Challenge not found." });
+    const challenge = normalizeChallenge(challengeRaw);
 
     const attempts = await Submission.findAll({
       where: { challenge_id, user_email: authUser.email },
@@ -184,8 +264,10 @@ router.post("/daily/submit", async (req, res) => {
       return res.status(400).json({ error: "Already solved!" });
     }
 
-    const timeTaken = Math.floor((Date.now() - (req.body.start_time || Date.now())) / 1000);
-    
+    const timeTaken = start_time
+      ? Math.floor((Date.now() - start_time) / 1000)
+      : 0;
+
     const { passed, feedback, score } = await evaluateSubmission(code, challenge);
 
     let xpEarned = 0;
@@ -196,14 +278,19 @@ router.post("/daily/submit", async (req, res) => {
       const user = await User.findOne({ where: { email: authUser.email } });
       if (user) {
         const newBadges = [...(user.badges || [])];
-
-        if (!challenge.is_weekly && timeTaken < 1800 && !newBadges.includes("speed_coder")) {
+        if (
+          !challenge.is_weekly &&
+          timeTaken < 1800 &&
+          !newBadges.includes("speed_coder")
+        ) {
           newBadges.push("speed_coder");
         }
-        if ((user.problems_solved || 0) + 1 >= 100 && !newBadges.includes("hundred_club")) {
+        if (
+          (user.problems_solved || 0) + 1 >= 100 &&
+          !newBadges.includes("hundred_club")
+        ) {
           newBadges.push("hundred_club");
         }
-
         await user.update({
           xp: (user.xp || 0) + xpEarned,
           problems_solved: (user.problems_solved || 0) + 1,
@@ -233,16 +320,17 @@ router.post("/daily/submit", async (req, res) => {
     });
   } catch (err) {
     console.error("Submit error:", err?.message || err);
-    res.status(500).json({ error: "Submission failed." });
+    res.status(500).json({ error: "Submission failed.", detail: err?.message });
   }
 });
 
+// POST /api/ai/daily/seed — force regenerate today
 router.post("/daily/seed", async (req, res) => {
   try {
     await DailyChallenge.destroy({ where: { date: today() } });
     res.json({ message: "Seeded!", challenges: await getOrCreateToday() });
   } catch (err) {
-    res.status(500).json({ error: "Seed failed." });
+    res.status(500).json({ error: "Seed failed.", detail: err?.message });
   }
 });
 
