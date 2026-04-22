@@ -248,12 +248,12 @@ router.post("/daily/submit", async (req, res) => {
   }
 
   try {
-    const challengeRaw = await DailyChallenge.findByPk(challenge_id);
+    const challengeRaw = await DailyChallenge.findByPk(String(challenge_id));
     if (!challengeRaw) return res.status(404).json({ error: "Challenge not found." });
     const challenge = normalizeChallenge(challengeRaw);
 
     const attempts = await Submission.findAll({
-      where: { challenge_id, user_email: authUser.email },
+      where: { challenge_id: String(challenge_id), user_email: authUser.email },
     });
     if (attempts.length >= 3) {
       return res.status(400).json({ error: "Out of attempts for today." });
