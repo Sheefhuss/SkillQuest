@@ -1,70 +1,36 @@
+'use strict';
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
 const DailyChallenge = sequelize.define('DailyChallenge', {
   date: {
-    type: DataTypes.DATEONLY, 
-  },
-  title: {
-    type: DataTypes.STRING,const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
-
-const DailyChallenge = sequelize.define('DailyChallenge', {
-  date: {
-    type: DataTypes.DATEONLY,
+    type: DataTypes.DATEONLY
   },
   title: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: false
   },
   difficulty: {
     type: DataTypes.STRING,
-    defaultValue: 'Medium',
+    defaultValue: 'Medium'
   },
   prompt: {
     type: DataTypes.TEXT,
-    allowNull: false,
+    allowNull: false
   },
   starter_code: {
-    type: DataTypes.TEXT,
+    type: DataTypes.TEXT
   },
   expected_concepts: {
-    type: DataTypes.JSONB,
-    defaultValue: [],
+    type: DataTypes.JSON
   },
   is_weekly: {
     type: DataTypes.BOOLEAN,
-    defaultValue: false,
+    defaultValue: false
   },
   xp_reward: {
     type: DataTypes.INTEGER,
-    defaultValue: 50,
-  },
-});
-
-module.exports = DailyChallenge;
-    allowNull: false, 
-  },
-  difficulty: {
-    type: DataTypes.ENUM('Easy', 'Medium', 'Hard', 'Insane'),
-  },
-  prompt: {
-    type: DataTypes.TEXT, 
-    allowNull: false, 
-  },
-  starter_code: {
-    type: DataTypes.TEXT, 
-  },
-  expected_concepts: {
-    type: DataTypes.JSON,
-  },
-  is_weekly: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-  xp_reward: {
-    type: DataTypes.INTEGER,
-    defaultValue: 50,
+    defaultValue: 50
   }
 });
 
