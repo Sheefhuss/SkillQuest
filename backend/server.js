@@ -27,13 +27,19 @@ app.use(express.json());
 const mocktestRoute = require('./routes/ai/mocktest-route');
 const chatRoute     = require('./routes/ai/chat-route');
 const missionRoute  = require('./routes/ai/mission-route');
+// ✅ FIX: Mount the daily route so AI seeding + evaluation actually works
+const dailyRoute    = require('./routes/ai/daily-route');
 
 app.use('/api/ai', mocktestRoute);
 app.use('/api/ai', chatRoute);
 app.use('/api/ai', missionRoute);
+// ✅ FIX: This registers /api/ai/daily, /api/ai/daily/submit, /api/ai/daily/seed etc.
+app.use('/api/ai', dailyRoute);
+
 app.get('/', (req, res) => {
   res.status(200).send('SkillQuest API is live!');
 });
+
 const JWT_SECRET = process.env.JWT_SECRET || 'skillquest_secret_key';
 
 function authenticateToken(req, res, next) {
@@ -146,23 +152,9 @@ app.get('/api/levels/:id', async (req, res) => {
   }
 });
 
-app.get('/api/daily', async (req, res) => {
-  try {
-    const challenges = await DailyChallenge.findAll({ where: req.query });
-    res.json(challenges);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching daily challenges' });
-  }
-});
-
-app.get('/api/daily/archive', async (req, res) => {
-  try {
-    const archive = await DailyChallenge.findAll({ order: [['date', 'DESC']], limit: 30 });
-    res.json(archive);
-  } catch (err) {
-    res.status(500).json({ message: 'Error fetching archive' });
-  }
-});
+// ✅ FIX: REMOVED the old bare /api/daily and /api/daily/archive routes that were
+// bypassing the AI seeding logic and always returning an empty array.
+// These are now handled correctly by daily-route.js at /api/ai/daily
 
 app.get('/api/submissions', async (req, res) => {
   try {
@@ -274,5 +266,5 @@ sequelize.sync({ alter: true }).then(() => {
     console.log(`Server is live and running on port ${PORT}`);
   });
 }).catch(err => {
-  console.error(' Database sync failed:', err);
+  console.error('Database sync failed:', err);
 });
