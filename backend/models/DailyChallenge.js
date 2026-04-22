@@ -17,10 +17,6 @@ const DailyChallenge = sequelize.define('DailyChallenge', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  // ✅ FIX: Changed from ENUM to STRING
-  // ENUM on Neon/PostgreSQL with sequelize.sync({ alter: true }) causes
-  // "missing ) after argument list" or type errors during deploy on Render.
-  // STRING is safe, simpler, and works identically for this use case.
   difficulty: {
     type: DataTypes.STRING,
     defaultValue: 'Medium',
