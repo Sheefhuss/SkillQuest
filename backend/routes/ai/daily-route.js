@@ -66,7 +66,6 @@ function normalizeChallenge(c) {
 async function getOrCreateToday() {
   const date = today();
 
-  // ✅ FIX: Check existing rows properly for Neon/PostgreSQL
   const existing = await DailyChallenge.findAll({ where: { date } });
   if (existing.length >= 2) return existing.map(normalizeChallenge);
 
@@ -80,9 +79,6 @@ async function getOrCreateToday() {
   );
   const daily = DAILY_POOL[dayOfYear % DAILY_POOL.length];
   const weekly = WEEKLY_POOL[Math.floor(dayOfYear / 7) % WEEKLY_POOL.length];
-
-  // ✅ FIX: Stringify expected_concepts for Neon if model uses TEXT/VARCHAR
-  // If your DailyChallenge model uses JSONB or ARRAY, remove JSON.stringify below
   const toInsert = [
     {
       ...daily,
@@ -102,10 +98,8 @@ async function getOrCreateToday() {
     const created = await DailyChallenge.bulkCreate(toInsert);
     return created.map(normalizeChallenge);
   } catch (err) {
-    // ✅ FIX: Log full error so Neon constraint issues are visible
     console.error("bulkCreate failed:", err.message, err.parent?.message);
 
-    // Groq fallback
     try {
       const completion = await groq.chat.completions.create({
         model: "llama-3.3-70b-versatile",
@@ -210,14 +204,11 @@ Rules:
     };
   }
 }
-
-// GET /api/ai/daily — get today's challenges
 router.get("/daily", async (req, res) => {
   try {
     const challenges = await getOrCreateToday();
     res.json(challenges);
   } catch (err) {
-    // ✅ FIX: Return full error message so frontend can debug
     console.error("Daily route error:", err?.message || err);
     res.status(500).json({ error: "Failed to load daily challenge.", detail: err?.message });
   }
@@ -235,9 +226,6 @@ router.get("/daily/archive", async (req, res) => {
     res.status(500).json({ error: "Failed to load archive." });
   }
 });
-
-// ✅ FIX: This is the correct submit endpoint the frontend should call
-// POST /api/ai/daily/submit — AI-evaluated submission
 router.post("/daily/submit", async (req, res) => {
   const authUser = getUser(req);
   if (!authUser) return res.status(401).json({ error: "Not authenticated." });
@@ -323,8 +311,6 @@ router.post("/daily/submit", async (req, res) => {
     res.status(500).json({ error: "Submission failed.", detail: err?.message });
   }
 });
-
-// POST /api/ai/daily/seed — force regenerate today
 router.post("/daily/seed", async (req, res) => {
   try {
     await DailyChallenge.destroy({ where: { date: today() } });
