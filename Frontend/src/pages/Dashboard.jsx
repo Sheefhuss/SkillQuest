@@ -16,8 +16,8 @@ export default function Dashboard() {
   
   const { data: dailyList = [] } = useQuery({
     queryKey: ["daily", today],
-    queryFn: () => apiClient.get(`/daily?date=${today}`),
-  });
+    queryFn: () => apiClient.get("/ai/daily"),
+});
   const { data: tracks = [] } = useQuery({
     queryKey: ["tracks"], 
     queryFn: () => apiClient.get("/tracks"),
