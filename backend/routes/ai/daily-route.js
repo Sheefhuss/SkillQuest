@@ -39,6 +39,14 @@ const WEEKLY_POOL = [
   { title: "Event Emitter Class", difficulty: "Hard", prompt: "Implement EventEmitter with on(), off(), emit().", starter_code: "class EventEmitter {\n  constructor() {}\n  on(event, listener) {}\n  off(event, listener) {}\n  emit(event, ...args) {}\n}", expected_concepts: ["class", "map", "filter", "listeners"], xp_reward: 150 },
 ];
 
+function parseConcepts(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return []; }
+  }
+  return [];
+}
+
 async function getOrCreateToday() {
   const date = today();
   const existing = await DailyChallenge.findAll({ where: { date } });
@@ -71,6 +79,7 @@ async function getOrCreateToday() {
 }
 
 async function evaluateSubmission(code, challenge) {
+  const concepts = parseConcepts(challenge.expected_concepts);
   try {
     const raw = await groqChat(
       [
@@ -81,7 +90,7 @@ async function evaluateSubmission(code, challenge) {
 
 Challenge: ${challenge.title}
 Problem: ${challenge.prompt}
-Expected concepts: ${(challenge.expected_concepts || []).join(", ")}
+Expected concepts: ${concepts.join(", ")}
 
 User's code:
 ${code}
@@ -99,7 +108,7 @@ Respond with JSON only:
     const result = JSON.parse(raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
     return { passed: result.passed === true, feedback: result.feedback || "Evaluated.", score: result.score || 0 };
   } catch {
-    const hasConcept = (challenge.expected_concepts || []).some((c) => code.toLowerCase().includes(c.toLowerCase()));
+    const hasConcept = concepts.some((c) => code.toLowerCase().includes(c.toLowerCase()));
     const looksLikeCode = code.length > 30 && /[{}()=;]/.test(code);
     const passed = looksLikeCode && (hasConcept || code.length > 120);
     return { passed, feedback: passed ? "Looks good!" : "Missing key concepts or too short.", score: passed ? 75 : 0 };
