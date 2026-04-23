@@ -22,7 +22,15 @@ const DailyChallenge = sequelize.define('DailyChallenge', {
     type: DataTypes.TEXT
   },
   expected_concepts: {
-    type: DataTypes.JSON
+    type: DataTypes.JSON,
+    get() {
+      const val = this.getDataValue('expected_concepts');
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch { return []; }
+      }
+      return [];
+    }
   },
   is_weekly: {
     type: DataTypes.BOOLEAN,
