@@ -1,7 +1,7 @@
 const path = require('path');
 const { Sequelize } = require('sequelize');
-
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: {
@@ -10,7 +10,20 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
       rejectUnauthorized: false,
     },
   },
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000,
+  },
+  logging: false,
 });
+
+setInterval(async () => {
+  try {
+    await sequelize.authenticate();
+  } catch (e) {}
+}, 4 * 60 * 1000);
 
 //For local one use this instead of above
 /** const sequelize = new Sequelize(
