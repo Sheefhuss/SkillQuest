@@ -27,13 +27,11 @@ app.use(express.json());
 const mocktestRoute = require('./routes/ai/mocktest-route');
 const chatRoute     = require('./routes/ai/chat-route');
 const missionRoute  = require('./routes/ai/mission-route');
-// ✅ FIX: Mount the daily route so AI seeding + evaluation actually works
 const dailyRoute    = require('./routes/ai/daily-route');
 
 app.use('/api/ai', mocktestRoute);
 app.use('/api/ai', chatRoute);
 app.use('/api/ai', missionRoute);
-// ✅ FIX: This registers /api/ai/daily, /api/ai/daily/submit, /api/ai/daily/seed etc.
 app.use('/api/ai', dailyRoute);
 
 app.get('/', (req, res) => {
@@ -152,10 +150,6 @@ app.get('/api/levels/:id', async (req, res) => {
   }
 });
 
-// ✅ FIX: REMOVED the old bare /api/daily and /api/daily/archive routes that were
-// bypassing the AI seeding logic and always returning an empty array.
-// These are now handled correctly by daily-route.js at /api/ai/daily
-
 app.get('/api/submissions', async (req, res) => {
   try {
     const subs = await Submission.findAll({ where: req.query, order: [['createdAt', 'DESC']] });
@@ -246,6 +240,17 @@ app.patch('/api/missions/:id', authenticateToken, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ message: 'Error updating mission' });
+  }
+});
+app.post('/api/missions', authenticateToken, async (req, res) => {
+  try {
+    const mission = await Mission.create({
+      ...req.body,
+      user_email: req.user.email,
+    });
+    res.json(mission);
+  } catch (err) {
+    res.status(500).json({ message: 'Error saving mission' });
   }
 });
 
