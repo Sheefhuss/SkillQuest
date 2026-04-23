@@ -1,9 +1,6 @@
-
 const express = require("express");
 const router = express.Router();
-const Groq = require("groq-sdk");
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const { groqChat } = require("../../utils/groqClient");
 
 const TRACK_NAMES = {
   fullstack: "Full Stack Web Development",
@@ -16,27 +13,20 @@ const TRACK_NAMES = {
 };
 
 router.post("/mocktest", async (req, res) => {
-  try {
-    const { trackSlug, tier = "Beginner", questionCount = 5 } = req.body;
+  const { trackSlug, tier = "Beginner", questionCount = 5 } = req.body;
 
-    if (!trackSlug) {
-      return res.status(400).json({ error: "trackSlug is required" });
-    }
+  if (!trackSlug) return res.status(400).json({ error: "trackSlug is required" });
 
-    const count = Math.min(10, Math.max(3, parseInt(questionCount) || 5));
-    const trackName = TRACK_NAMES[trackSlug] || trackSlug;
+  const count = Math.min(10, Math.max(3, parseInt(questionCount) || 5));
+  const trackName = TRACK_NAMES[trackSlug] || trackSlug;
 
-    const prompt = `You are an expert technical quiz generator.
-
-Generate exactly ${count} multiple-choice questions (MCQ) about "${trackName}" at ${tier} level.
+  const prompt = `Generate exactly ${count} multiple-choice questions about "${trackName}" at ${tier} level.
 
 Rules:
-- Each question must have exactly 4 options.
-- The "answer" field must EXACTLY match one of the options strings.
-- Include a brief "explanation" (1-2 sentences) for the correct answer.
-- Questions must be clear and appropriate for ${tier} level.
-- No code blocks. Text-based questions only.
-- Vary topics broadly within "${trackName}".
+- Each question must have exactly 4 options
+- The "answer" field must EXACTLY match one of the option strings
+- Include a brief "explanation" (1-2 sentences) for the correct answer
+- Vary topics broadly within "${trackName}"
 
 Respond ONLY with a valid JSON array. No markdown, no extra text.
 
@@ -49,52 +39,37 @@ Respond ONLY with a valid JSON array. No markdown, no extra text.
   }
 ]`;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: "You are a technical quiz generator. Respond with valid JSON array only. No markdown." },
+  try {
+    const raw = await groqChat(
+      [
+        { role: "system", content: "You are a technical quiz generator. Respond with valid JSON array only." },
         { role: "user", content: prompt },
       ],
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
+      { temperature: 0.7, max_tokens: 2000 }
+    );
 
-    const raw = completion.choices[0]?.message?.content || "[]";
     const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-
     let questions;
+
     try {
       questions = JSON.parse(cleaned);
     } catch {
-      console.error("Groq returned invalid JSON:", raw);
       return res.status(500).json({ error: "AI returned invalid response. Please try again." });
     }
 
     const valid = questions
-      .filter((q) =>
-        q.q &&
-        Array.isArray(q.options) &&
-        q.options.length === 4 &&
-        q.answer &&
-        q.options.includes(q.answer)
-      )
+      .filter((q) => q.q && Array.isArray(q.options) && q.options.length === 4 && q.answer && q.options.includes(q.answer))
       .slice(0, count)
-      .map((q) => ({
-        type: "mcq",
-        q: q.q,
-        options: q.options,
-        answer: q.answer,
-        explanation: q.explanation || "",
-      }));
+      .map((q) => ({ type: "mcq", q: q.q, options: q.options, answer: q.answer, explanation: q.explanation || "" }));
 
     if (valid.length === 0) {
       return res.status(500).json({ error: "Could not generate valid questions. Please try again." });
     }
 
-    return res.json({ questions: valid, total: valid.length });
+    res.json({ questions: valid, total: valid.length });
   } catch (err) {
-    console.error("MockTest Groq error:", err?.message || err);
-    return res.status(500).json({ error: "Internal server error." });
+    console.error("MockTest error:", err?.message);
+    res.status(err.status || 500).json({ error: "Internal server error." });
   }
 });
 
