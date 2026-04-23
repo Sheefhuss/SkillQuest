@@ -9,11 +9,36 @@ import { toast } from "sonner";
 import GlassCard from "@/components/game/GlassCard";
 
 const LANGUAGES = [
-  { id: "javascript", label: "JS",     filename: "solution.js",   placeholder: "// Write your solution here" },
-  { id: "python",     label: "Python", filename: "solution.py",   placeholder: "# Write your solution here" },
-  { id: "java",       label: "Java",   filename: "Solution.java", placeholder: "// Write your solution here" },
-  { id: "c",          label: "C",      filename: "solution.c",    placeholder: "// Write your solution here" },
-  { id: "cpp",        label: "C++",    filename: "solution.cpp",  placeholder: "// Write your solution here" },
+  {
+    id: "javascript",
+    label: "JS",
+    filename: "solution.js",
+    starter: `function solution(arr) {\n  // Write your solution here\n}`,
+  },
+  {
+    id: "python",
+    label: "Python",
+    filename: "solution.py",
+    starter: `def solution(arr):\n    # Write your solution here\n    pass`,
+  },
+  {
+    id: "java",
+    label: "Java",
+    filename: "Solution.java",
+    starter: `public class Solution {\n    public static void solution(int[] arr) {\n        // Write your solution here\n    }\n}`,
+  },
+  {
+    id: "c",
+    label: "C",
+    filename: "solution.c",
+    starter: `#include <stdio.h>\n\nvoid solution(int arr[], int n) {\n    // Write your solution here\n}`,
+  },
+  {
+    id: "cpp",
+    label: "C++",
+    filename: "solution.cpp",
+    starter: `#include <iostream>\n#include <vector>\nusing namespace std;\n\nvoid solution(vector<int>& arr) {\n    // Write your solution here\n}`,
+  },
 ];
 
 function parseConcepts(val) {
@@ -68,6 +93,7 @@ export default function Daily() {
   const [elapsed, setElapsed] = useState(0);
   const [evaluating, setEvaluating] = useState(false);
   const [language, setLanguage] = useState("javascript");
+  const [codeByLang, setCodeByLang] = useState({});
 
   useEffect(() => {
     const id = setInterval(
@@ -79,9 +105,20 @@ export default function Daily() {
 
   useEffect(() => {
     if (challenge) {
-      setCode((prev) => prev || challenge.starter_code || "");
+      const lang = LANGUAGES.find((l) => l.id === "javascript");
+      setCode((prev) => prev || lang.starter);
     }
   }, [challenge?.id]);
+
+  const handleLanguageSwitch = (langId) => {
+    setCodeByLang((prev) => ({ ...prev, [language]: code }));
+    const lang = LANGUAGES.find((l) => l.id === langId);
+    setLanguage(langId);
+    setCode((prev) => {
+      const saved = { ...codeByLang, [language]: code }[langId];
+      return saved !== undefined ? saved : lang.starter;
+    });
+  };
 
   if (dailyError) {
     return (
@@ -219,7 +256,7 @@ export default function Daily() {
           {LANGUAGES.map((lang) => (
             <button
               key={lang.id}
-              onClick={() => setLanguage(lang.id)}
+              onClick={() => handleLanguageSwitch(lang.id)}
               className={`px-3 py-1.5 text-xs font-mono rounded-t transition-colors whitespace-nowrap ${
                 language === lang.id
                   ? "bg-secondary text-foreground border border-b-0 border-border/60"
@@ -240,7 +277,7 @@ export default function Daily() {
           value={code}
           onChange={(e) => setCode(e.target.value)}
           className="font-mono min-h-[320px] bg-transparent border-0 rounded-none focus-visible:ring-0"
-          placeholder={activeLang.placeholder}
+          placeholder={activeLang.starter}
         />
       </GlassCard>
 
@@ -264,7 +301,7 @@ export default function Daily() {
         </Button>
         <Button
           variant="outline"
-          onClick={() => setCode(challenge.starter_code || "")}
+          onClick={() => setCode(activeLang.starter)}
           className="bg-transparent"
         >
           Reset code
