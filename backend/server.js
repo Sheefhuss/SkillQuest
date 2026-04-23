@@ -27,7 +27,7 @@ app.use(cors({
   credentials: true,
   optionsSuccessStatus: 200,
 }));
-app.options('*', cors());
+app.options('/{*path}', cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/api/ai', require('./routes/ai/mocktest-route'));
