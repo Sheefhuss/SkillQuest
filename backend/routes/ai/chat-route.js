@@ -1,17 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const Groq = require("groq-sdk");
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const { groqChat } = require("../../utils/groqClient");
 
 router.post("/chat", async (req, res) => {
+  const { prompt, history = [] } = req.body;
+
+  if (!prompt) return res.status(400).json({ error: "prompt is required" });
+
   try {
-    const { prompt, history = [] } = req.body;
-
-    if (!prompt) {
-      return res.status(400).json({ error: "prompt is required" });
-    }
-
     const messages = [
       {
         role: "system",
@@ -26,19 +22,11 @@ Never refuse a coding question. Always be encouraging.`,
       { role: "user", content: prompt },
     ];
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages,
-      temperature: 0.7,
-      max_tokens: 1024,
-    });
-
-    const text = completion.choices[0]?.message?.content || "Sorry, I couldn't process that.";
-    return res.json({ text });
-
+    const text = await groqChat(messages, { temperature: 0.7, max_tokens: 1024 });
+    res.json({ text: text || "Sorry, I couldn't process that." });
   } catch (err) {
-    console.error("AI Chat Groq error:", err?.message || err);
-    return res.status(500).json({ text: "AI backend error. Please try again." });
+    console.error("Chat error:", err?.message);
+    res.status(err.status || 500).json({ text: "AI backend error. Please try again." });
   }
 });
 
