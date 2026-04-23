@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import GlassCard from "@/components/game/GlassCard";
-import { BADGES } from "@/lib/game";
+
+function parseConcepts(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    try { return JSON.parse(val); } catch { return []; }
+  }
+  return [];
+}
 
 export default function Daily() {
   const qc = useQueryClient();
@@ -20,7 +27,6 @@ export default function Daily() {
     queryFn: () => apiClient.get("/users/me"),
   });
 
-  // ✅ FIX: Show error state so you can see exact failure from Neon/backend
   const {
     data: list = [],
     isError: dailyError,
@@ -43,15 +49,13 @@ export default function Daily() {
   const { data: subsList = [] } = useQuery({
     queryKey: ["mySubs", challenge?.id, me?.email],
     enabled: !!challenge && !!me,
-    queryFn: () =>
-      apiClient.get(`/submissions?challenge_id=${challenge.id}`),
+    queryFn: () => apiClient.get(`/submissions?challenge_id=${challenge.id}`),
   });
 
   const attemptsUsed = subsList.length;
   const alreadyPassed = subsList.some((s) => s.passed);
 
   const [code, setCode] = useState("");
-  // ✅ FIX: Store startTime in a ref so it persists across renders without resetting
   const [startTime] = useState(() => Date.now());
   const [elapsed, setElapsed] = useState(0);
   const [evaluating, setEvaluating] = useState(false);
@@ -64,14 +68,12 @@ export default function Daily() {
     return () => clearInterval(id);
   }, [startTime]);
 
-  // ✅ FIX: Only set starter code once when challenge first loads
   useEffect(() => {
     if (challenge) {
       setCode((prev) => prev || challenge.starter_code || "");
     }
-  }, [challenge?.id]); // depend on id not the whole object
+  }, [challenge?.id]);
 
-  // ✅ FIX: Show backend error message directly on screen for easier debugging
   if (dailyError) {
     return (
       <GlassCard className="p-8 text-center">
@@ -116,23 +118,19 @@ export default function Daily() {
     setEvaluating(true);
 
     try {
-      // ✅ FIX: Call the correct AI-evaluated endpoint instead of /submissions directly
       const result = await apiClient.post("/ai/daily/submit", {
         challenge_id: challenge.id,
         code,
-        start_time: startTime, // send raw timestamp so server can compute timeTaken
+        start_time: startTime,
       });
 
       if (result.passed) {
-        // ✅ FIX: Badge toasts based on server response, not duplicated client logic
         if (result.xp_earned > challenge.xp_reward) {
-          // speed bonus was applied
           toast.success(`⚡ Speed bonus! +${result.xp_earned} XP earned!`);
         } else {
           toast.success(`+${result.xp_earned} XP earned!`);
         }
 
-        // Post to feed
         const timeTaken = Math.floor((Date.now() - startTime) / 1000);
         await apiClient.post("/feed", {
           kind: "challenge",
@@ -146,7 +144,6 @@ export default function Daily() {
         );
       }
 
-      // ✅ FIX: Invalidate all relevant queries so UI updates immediately
       qc.invalidateQueries(["me"]);
       qc.invalidateQueries(["mySubs", challenge.id, me?.email]);
     } catch (err) {
@@ -159,6 +156,7 @@ export default function Daily() {
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const seconds = String(elapsed % 60).padStart(2, "0");
+  const concepts = parseConcepts(challenge.expected_concepts);
 
   return (
     <div className="space-y-6">
@@ -194,7 +192,7 @@ export default function Daily() {
       <GlassCard className="p-6 neon-border">
         <div className="text-sm whitespace-pre-wrap">{challenge.prompt}</div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {(challenge.expected_concepts || []).map((c) => (
+          {concepts.map((c) => (
             <span
               key={c}
               className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full glass"
