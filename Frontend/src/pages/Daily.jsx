@@ -8,6 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import GlassCard from "@/components/game/GlassCard";
 
+const LANGUAGES = [
+  { id: "javascript", label: "JS",     filename: "solution.js",   placeholder: "// Write your solution here" },
+  { id: "python",     label: "Python", filename: "solution.py",   placeholder: "# Write your solution here" },
+  { id: "java",       label: "Java",   filename: "Solution.java", placeholder: "// Write your solution here" },
+  { id: "c",          label: "C",      filename: "solution.c",    placeholder: "// Write your solution here" },
+  { id: "cpp",        label: "C++",    filename: "solution.cpp",  placeholder: "// Write your solution here" },
+];
+
 function parseConcepts(val) {
   if (Array.isArray(val)) return val;
   if (typeof val === "string") {
@@ -59,6 +67,7 @@ export default function Daily() {
   const [startTime] = useState(() => Date.now());
   const [elapsed, setElapsed] = useState(0);
   const [evaluating, setEvaluating] = useState(false);
+  const [language, setLanguage] = useState("javascript");
 
   useEffect(() => {
     const id = setInterval(
@@ -121,6 +130,7 @@ export default function Daily() {
       const result = await apiClient.post("/ai/daily/submit", {
         challenge_id: challenge.id,
         code,
+        language,
         start_time: startTime,
       });
 
@@ -157,6 +167,7 @@ export default function Daily() {
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const seconds = String(elapsed % 60).padStart(2, "0");
   const concepts = parseConcepts(challenge.expected_concepts);
+  const activeLang = LANGUAGES.find((l) => l.id === language);
 
   return (
     <div className="space-y-6">
@@ -204,15 +215,32 @@ export default function Daily() {
       </GlassCard>
 
       <GlassCard className="p-0 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border/60">
-          <div className="text-xs font-mono text-muted-foreground">solution.js</div>
-          <div className="text-xs text-muted-foreground">{code.length} chars</div>
+        <div className="flex items-center gap-1 px-3 pt-2 border-b border-border/60 overflow-x-auto">
+          {LANGUAGES.map((lang) => (
+            <button
+              key={lang.id}
+              onClick={() => setLanguage(lang.id)}
+              className={`px-3 py-1.5 text-xs font-mono rounded-t transition-colors whitespace-nowrap ${
+                language === lang.id
+                  ? "bg-secondary text-foreground border border-b-0 border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {lang.label}
+            </button>
+          ))}
+          <div className="ml-auto text-xs text-muted-foreground pb-1.5 pl-2 shrink-0">
+            {code.length} chars
+          </div>
+        </div>
+        <div className="flex items-center px-4 py-1.5 border-b border-border/40 bg-secondary/30">
+          <div className="text-xs font-mono text-muted-foreground">{activeLang.filename}</div>
         </div>
         <Textarea
           value={code}
           onChange={(e) => setCode(e.target.value)}
           className="font-mono min-h-[320px] bg-transparent border-0 rounded-none focus-visible:ring-0"
-          placeholder="// Write your solution here"
+          placeholder={activeLang.placeholder}
         />
       </GlassCard>
 
