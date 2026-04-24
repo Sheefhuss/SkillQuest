@@ -38,21 +38,27 @@ const WEEKLY_POOL = [
   { title: "Deep Object Clone", difficulty: "Hard", prompt: "Deep clone a JS object without JSON.parse/stringify. Handle nested objects and arrays.", starter_code: "function deepClone(obj) {\n  \n}", expected_concepts: ["recursion", "isArray", "typeof"], xp_reward: 150 },
   { title: "Event Emitter Class", difficulty: "Hard", prompt: "Implement EventEmitter with on(), off(), emit().", starter_code: "class EventEmitter {\n  constructor() {}\n  on(event, listener) {}\n  off(event, listener) {}\n  emit(event, ...args) {}\n}", expected_concepts: ["class", "map", "filter", "listeners"], xp_reward: 150 },
 ];
-const STARTER_TEMPLATES = {
-  javascript: (name) => `function solution(${name}) {\n  // your code here\n}`,
-  python:     (name) => `def solution(${name}):\n    # your code here\n    pass`,
-  typescript: (name) => `function solution(${name}: any): any {\n  // your code here\n}`,
-  java:       (name) => `public class Solution {\n    public static Object solution(Object ${name}) {\n        // your code here\n        return null;\n    }\n}`,
-  cpp:        (name) => `#include <bits/stdc++.h>\nusing namespace std;\n\nauto solution(auto ${name}) {\n    // your code here\n}`,
+
+const IDIOM_HINTS = {
+  python:     "In Python, str[::-1] slicing, list comprehensions, and built-in functions like reversed() are all valid and idiomatic. Do NOT penalise these.",
+  java:       "In Java, StringBuilder.reverse(), loops, and standard library methods are all valid.",
+  c:          "In C, manual pointer manipulation and loops are expected. Accept any correct approach.",
+  cpp:        "In C++, std::reverse, loops, and STL are all valid. Do NOT penalise STL usage.",
+  javascript: "The challenge may say avoid .reverse() — enforce that strictly only for JavaScript.",
 };
 
 function getStarterForLanguage(challenge, language) {
   if (language === "javascript") return challenge.starter_code;
-  const gen = STARTER_TEMPLATES[language];
-  if (!gen) return challenge.starter_code;
   const match = challenge.starter_code.match(/\(([^)]*)\)/);
   const params = match ? match[1] : "input";
-  return gen(params);
+  const templates = {
+    python:     `def solution(${params}):\n    pass`,
+    typescript: `function solution(${params}: any): any {\n  \n}`,
+    java:       `public class Solution {\n    public static Object solution(Object ${params}) {\n        return null;\n    }\n}`,
+    c:          `#include <stdio.h>\n\nvoid solution(int arr[], int n) {\n}`,
+    cpp:        `#include <bits/stdc++.h>\nusing namespace std;\n\nauto solution(auto ${params}) {\n}`,
+  };
+  return templates[language] || challenge.starter_code;
 }
 
 function parseConcepts(val) {
@@ -96,6 +102,8 @@ async function getOrCreateToday() {
 
 async function evaluateSubmission(code, challenge, language = "javascript") {
   const concepts = parseConcepts(challenge.expected_concepts);
+  const hint = IDIOM_HINTS[language] || `Accept idiomatic ${language} solutions.`;
+
   try {
     const raw = await groqChat(
       [
@@ -106,12 +114,15 @@ async function evaluateSubmission(code, challenge, language = "javascript") {
 
 Challenge: ${challenge.title}
 Problem: ${challenge.prompt}
-Expected concepts (judge based on ${language} equivalents): ${concepts.join(", ")}
+Expected concepts (judge based on ${language} equivalents, NOT JavaScript): ${concepts.join(", ")}
+
+IMPORTANT LANGUAGE RULES: ${hint}
+The restriction "without using .reverse()" applies ONLY to JavaScript's Array/String .reverse() method.
+For other languages, accept any correct and idiomatic solution.
 
 User's code (${language}):
 ${code}
 
-Accept valid ${language} solutions even if they use different syntax than JavaScript.
 Respond with JSON only:
 {
   "passed": true or false,
@@ -129,8 +140,8 @@ Respond with JSON only:
       score: result.score || 0,
     };
   } catch {
-    const looksLikeCode = code.length > 30 && /[{}()=:;]/.test(code);
-    const passed = looksLikeCode && code.length > 80;
+    const looksLikeCode = code.length > 30 && /[{}()=:;[\]]/.test(code);
+    const passed = looksLikeCode && code.length > 40;
     return {
       passed,
       feedback: passed ? "Looks good!" : "Too short or missing logic.",
@@ -188,10 +199,7 @@ router.post("/daily/submit", async (req, res) => {
     if (attempts.some((a) => a.passed))
       return res.status(400).json({ error: "Already solved!" });
 
-    const timeTaken = Math.floor(
-      (Date.now() - (req.body.start_time || Date.now())) / 1000
-    );
-
+    const timeTaken = Math.floor((Date.now() - (req.body.start_time || Date.now())) / 1000);
     const { passed, feedback, score } = await evaluateSubmission(code, challenge, language);
 
     let xpEarned = 0;
@@ -202,18 +210,10 @@ router.post("/daily/submit", async (req, res) => {
       const user = await User.findOne({ where: { email: authUser.email } });
       if (user) {
         const newBadges = [...(user.badges || [])];
-        if (
-          !challenge.is_weekly &&
-          timeTaken < 1800 &&
-          !newBadges.includes("speed_coder")
-        )
+        if (!challenge.is_weekly && timeTaken < 1800 && !newBadges.includes("speed_coder"))
           newBadges.push("speed_coder");
-        if (
-          (user.problems_solved || 0) + 1 >= 100 &&
-          !newBadges.includes("hundred_club")
-        )
+        if ((user.problems_solved || 0) + 1 >= 100 && !newBadges.includes("hundred_club"))
           newBadges.push("hundred_club");
-
         await user.update({
           xp: (user.xp || 0) + xpEarned,
           problems_solved: (user.problems_solved || 0) + 1,
@@ -247,6 +247,7 @@ router.post("/daily/submit", async (req, res) => {
     res.status(500).json({ error: "Submission failed.", detail: err?.message });
   }
 });
+
 router.post("/daily/seed", async (req, res) => {
   try {
     await DailyChallenge.destroy({ where: { date: today() } });
