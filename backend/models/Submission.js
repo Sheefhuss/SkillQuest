@@ -7,10 +7,14 @@ const Submission = sequelize.define('Submission', {
     type: DataTypes.STRING
   },
   challenge_id: {
-    type: DataTypes.STRING
+    type: DataTypes.INTEGER
   },
   code: {
     type: DataTypes.TEXT
+  },
+  language: {
+    type: DataTypes.STRING,
+    defaultValue: 'javascript'
   },
   attempts: {
     type: DataTypes.INTEGER,
