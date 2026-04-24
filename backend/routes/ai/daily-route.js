@@ -38,10 +38,26 @@ const WEEKLY_POOL = [
   { title: "Deep Object Clone", difficulty: "Hard", prompt: "Deep clone a JS object without JSON.parse/stringify. Handle nested objects and arrays.", starter_code: "function deepClone(obj) {\n  \n}", expected_concepts: ["recursion", "isArray", "typeof"], xp_reward: 150 },
   { title: "Event Emitter Class", difficulty: "Hard", prompt: "Implement EventEmitter with on(), off(), emit().", starter_code: "class EventEmitter {\n  constructor() {}\n  on(event, listener) {}\n  off(event, listener) {}\n  emit(event, ...args) {}\n}", expected_concepts: ["class", "map", "filter", "listeners"], xp_reward: 150 },
 ];
+const STARTER_TEMPLATES = {
+  javascript: (name) => `function solution(${name}) {\n  // your code here\n}`,
+  python:     (name) => `def solution(${name}):\n    # your code here\n    pass`,
+  typescript: (name) => `function solution(${name}: any): any {\n  // your code here\n}`,
+  java:       (name) => `public class Solution {\n    public static Object solution(Object ${name}) {\n        // your code here\n        return null;\n    }\n}`,
+  cpp:        (name) => `#include <bits/stdc++.h>\nusing namespace std;\n\nauto solution(auto ${name}) {\n    // your code here\n}`,
+};
+
+function getStarterForLanguage(challenge, language) {
+  if (language === "javascript") return challenge.starter_code;
+  const gen = STARTER_TEMPLATES[language];
+  if (!gen) return challenge.starter_code;
+  const match = challenge.starter_code.match(/\(([^)]*)\)/);
+  const params = match ? match[1] : "input";
+  return gen(params);
+}
 
 function parseConcepts(val) {
   if (Array.isArray(val)) return val;
-  if (typeof val === 'string') {
+  if (typeof val === "string") {
     try { return JSON.parse(val); } catch { return []; }
   }
   return [];
@@ -78,7 +94,7 @@ async function getOrCreateToday() {
   }
 }
 
-async function evaluateSubmission(code, challenge) {
+async function evaluateSubmission(code, challenge, language = "javascript") {
   const concepts = parseConcepts(challenge.expected_concepts);
   try {
     const raw = await groqChat(
@@ -86,15 +102,16 @@ async function evaluateSubmission(code, challenge) {
         { role: "system", content: "You are a code evaluator. Respond with valid JSON only." },
         {
           role: "user",
-          content: `Evaluate this JavaScript solution.
+          content: `Evaluate this ${language.toUpperCase()} solution.
 
 Challenge: ${challenge.title}
 Problem: ${challenge.prompt}
-Expected concepts: ${concepts.join(", ")}
+Expected concepts (judge based on ${language} equivalents): ${concepts.join(", ")}
 
-User's code:
+User's code (${language}):
 ${code}
 
+Accept valid ${language} solutions even if they use different syntax than JavaScript.
 Respond with JSON only:
 {
   "passed": true or false,
@@ -106,12 +123,19 @@ Respond with JSON only:
       { temperature: 0.2, max_tokens: 300 }
     );
     const result = JSON.parse(raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
-    return { passed: result.passed === true, feedback: result.feedback || "Evaluated.", score: result.score || 0 };
+    return {
+      passed: result.passed === true,
+      feedback: result.feedback || "Evaluated.",
+      score: result.score || 0,
+    };
   } catch {
-    const hasConcept = concepts.some((c) => code.toLowerCase().includes(c.toLowerCase()));
-    const looksLikeCode = code.length > 30 && /[{}()=;]/.test(code);
-    const passed = looksLikeCode && (hasConcept || code.length > 120);
-    return { passed, feedback: passed ? "Looks good!" : "Missing key concepts or too short.", score: passed ? 75 : 0 };
+    const looksLikeCode = code.length > 30 && /[{}()=:;]/.test(code);
+    const passed = looksLikeCode && code.length > 80;
+    return {
+      passed,
+      feedback: passed ? "Looks good!" : "Too short or missing logic.",
+      score: passed ? 75 : 0,
+    };
   }
 }
 
@@ -132,50 +156,97 @@ router.get("/daily/archive", async (req, res) => {
   }
 });
 
+router.get("/daily/starter", async (req, res) => {
+  try {
+    const { challenge_id, language = "javascript" } = req.query;
+    if (!challenge_id) return res.status(400).json({ error: "challenge_id required." });
+    const challenge = await DailyChallenge.findByPk(Number(challenge_id));
+    if (!challenge) return res.status(404).json({ error: "Challenge not found." });
+    res.json({ starter_code: getStarterForLanguage(challenge, language) });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get starter code." });
+  }
+});
+
 router.post("/daily/submit", async (req, res) => {
   const authUser = getUser(req);
   if (!authUser) return res.status(401).json({ error: "Not authenticated." });
 
-  const { challenge_id, code } = req.body;
-  if (!challenge_id || !code?.trim()) return res.status(400).json({ error: "challenge_id and code are required." });
+  const { challenge_id, code, language = "javascript" } = req.body;
+  if (!challenge_id || !code?.trim())
+    return res.status(400).json({ error: "challenge_id and code are required." });
 
   try {
-    const challenge = await DailyChallenge.findByPk(challenge_id);
+    const challenge = await DailyChallenge.findByPk(Number(challenge_id));
     if (!challenge) return res.status(404).json({ error: "Challenge not found." });
 
-    const attempts = await Submission.findAll({ where: { challenge_id, user_email: authUser.email } });
-    if (attempts.length >= 3) return res.status(400).json({ error: "Out of attempts for today." });
-    if (attempts.some((a) => a.passed)) return res.status(400).json({ error: "Already solved!" });
+    const attempts = await Submission.findAll({
+      where: { challenge_id: Number(challenge_id), user_email: authUser.email },
+    });
+    if (attempts.length >= 3)
+      return res.status(400).json({ error: "Out of attempts for today." });
+    if (attempts.some((a) => a.passed))
+      return res.status(400).json({ error: "Already solved!" });
 
-    const timeTaken = Math.floor((Date.now() - (req.body.start_time || Date.now())) / 1000);
-    const { passed, feedback, score } = await evaluateSubmission(code, challenge);
+    const timeTaken = Math.floor(
+      (Date.now() - (req.body.start_time || Date.now())) / 1000
+    );
+
+    const { passed, feedback, score } = await evaluateSubmission(code, challenge, language);
 
     let xpEarned = 0;
     if (passed) {
       xpEarned = challenge.xp_reward;
       if (!challenge.is_weekly && timeTaken < 1800) xpEarned += 25;
+
       const user = await User.findOne({ where: { email: authUser.email } });
       if (user) {
         const newBadges = [...(user.badges || [])];
-        if (!challenge.is_weekly && timeTaken < 1800 && !newBadges.includes("speed_coder")) newBadges.push("speed_coder");
-        if ((user.problems_solved || 0) + 1 >= 100 && !newBadges.includes("hundred_club")) newBadges.push("hundred_club");
-        await user.update({ xp: (user.xp || 0) + xpEarned, problems_solved: (user.problems_solved || 0) + 1, badges: newBadges });
+        if (
+          !challenge.is_weekly &&
+          timeTaken < 1800 &&
+          !newBadges.includes("speed_coder")
+        )
+          newBadges.push("speed_coder");
+        if (
+          (user.problems_solved || 0) + 1 >= 100 &&
+          !newBadges.includes("hundred_club")
+        )
+          newBadges.push("hundred_club");
+
+        await user.update({
+          xp: (user.xp || 0) + xpEarned,
+          problems_solved: (user.problems_solved || 0) + 1,
+          badges: newBadges,
+        });
       }
     }
 
     const submission = await Submission.create({
-      challenge_id, user_email: authUser.email, code, passed,
-      attempts: attempts.length + 1, time_taken_seconds: timeTaken,
-      xp_earned: xpEarned, ai_feedback: feedback,
+      challenge_id: Number(challenge_id),
+      user_email: authUser.email,
+      code,
+      language,
+      passed,
+      attempts: attempts.length + 1,
+      time_taken_seconds: timeTaken,
+      xp_earned: xpEarned,
+      ai_feedback: feedback,
     });
 
-    res.json({ passed, feedback, score, xp_earned: xpEarned, attempts_used: attempts.length + 1, submission });
+    res.json({
+      passed,
+      feedback,
+      score,
+      xp_earned: xpEarned,
+      attempts_used: attempts.length + 1,
+      submission,
+    });
   } catch (err) {
-    console.error("Submit error:", err?.message);
-    res.status(err.status || 500).json({ error: "Submission failed." });
+    console.error("Submit error:", err?.message, err?.stack);
+    res.status(500).json({ error: "Submission failed.", detail: err?.message });
   }
 });
-
 router.post("/daily/seed", async (req, res) => {
   try {
     await DailyChallenge.destroy({ where: { date: today() } });
