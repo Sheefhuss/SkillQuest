@@ -84,12 +84,13 @@ export default function Daily() {
   const codeByLangRef = useRef({});
   
   useEffect(() => {
+    if (alreadyPassed || attemptsUsed >= 3) return;
     const id = setInterval(
       () => setElapsed(Math.floor((Date.now() - startTime) / 1000)),
       1000
     );
     return () => clearInterval(id);
-  }, [startTime]);
+  }, [startTime, alreadyPassed, attemptsUsed]);
   useEffect(() => {
     if (challenge) {
       setLanguage("javascript");
