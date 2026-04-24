@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/api/apiClient";
 import { useSearchParams } from "react-router-dom";
@@ -9,37 +9,25 @@ import { toast } from "sonner";
 import GlassCard from "@/components/game/GlassCard";
 
 const LANGUAGES = [
-  {
-    id: "javascript",
-    label: "JS",
-    filename: "solution.js",
-    starter: `function solution(arr) {\n  // Write your solution here\n}`,
-  },
-  {
-    id: "python",
-    label: "Python",
-    filename: "solution.py",
-    starter: `def solution(arr):\n    # Write your solution here\n    pass`,
-  },
-  {
-    id: "java",
-    label: "Java",
-    filename: "Solution.java",
-    starter: `public class Solution {\n    public static void solution(int[] arr) {\n        // Write your solution here\n    }\n}`,
-  },
-  {
-    id: "c",
-    label: "C",
-    filename: "solution.c",
-    starter: `#include <stdio.h>\n\nvoid solution(int arr[], int n) {\n    // Write your solution here\n}`,
-  },
-  {
-    id: "cpp",
-    label: "C++",
-    filename: "solution.cpp",
-    starter: `#include <iostream>\n#include <vector>\nusing namespace std;\n\nvoid solution(vector<int>& arr) {\n    // Write your solution here\n}`,
-  },
+  { id: "javascript", label: "JS",     filename: "solution.js"   },
+  { id: "python",     label: "Python", filename: "solution.py"   },
+  { id: "java",       label: "Java",   filename: "Solution.java" },
+  { id: "c",          label: "C",      filename: "solution.c"    },
+  { id: "cpp",        label: "C++",    filename: "solution.cpp"  },
 ];
+function getDefaultStarter(langId, challenge) {
+  if (langId === "javascript") return challenge?.starter_code || "function solution(arr) {\n  // Write your solution here\n}";
+  const match = (challenge?.starter_code || "").match(/\(([^)]*)\)/);
+  const params = match ? match[1] : "input";
+
+  const templates = {
+    python: `def solution(${params}):\n    # Write your solution here\n    pass`,
+    java:   `public class Solution {\n    public static void solution(${params}) {\n        // Write your solution here\n    }\n}`,
+    c:      `#include <stdio.h>\n\nvoid solution(int arr[], int n) {\n    // Write your solution here\n}`,
+    cpp:    `#include <iostream>\n#include <vector>\nusing namespace std;\n\nvoid solution(vector<int>& arr) {\n    // Write your solution here\n}`,
+  };
+  return templates[langId] || `// Write your ${langId} solution here`;
+}
 
 function parseConcepts(val) {
   if (Array.isArray(val)) return val;
@@ -88,13 +76,13 @@ export default function Daily() {
   const attemptsUsed = subsList.length;
   const alreadyPassed = subsList.some((s) => s.passed);
 
-  const [code, setCode] = useState("");
-  const [startTime] = useState(() => Date.now());
-  const [elapsed, setElapsed] = useState(0);
+  const [language, setLanguage]   = useState("javascript");
+  const [code, setCode]           = useState("");
   const [evaluating, setEvaluating] = useState(false);
-  const [language, setLanguage] = useState("javascript");
-  const [codeByLang, setCodeByLang] = useState({});
-
+  const [startTime]               = useState(() => Date.now());
+  const [elapsed, setElapsed]     = useState(0);
+  const codeByLangRef = useRef({});
+  
   useEffect(() => {
     const id = setInterval(
       () => setElapsed(Math.floor((Date.now() - startTime) / 1000)),
@@ -102,22 +90,24 @@ export default function Daily() {
     );
     return () => clearInterval(id);
   }, [startTime]);
-
   useEffect(() => {
     if (challenge) {
-      const lang = LANGUAGES.find((l) => l.id === "javascript");
-      setCode((prev) => prev || lang.starter);
+      setLanguage("javascript");
+      codeByLangRef.current = {}; 
+      setCode(getDefaultStarter("javascript", challenge));
     }
   }, [challenge?.id]);
-
   const handleLanguageSwitch = (langId) => {
-    setCodeByLang((prev) => ({ ...prev, [language]: code }));
-    const lang = LANGUAGES.find((l) => l.id === langId);
+    if (langId === language) return;
+    codeByLangRef.current[language] = code;
+    const saved = codeByLangRef.current[langId];
     setLanguage(langId);
-    setCode((prev) => {
-      const saved = { ...codeByLang, [language]: code }[langId];
-      return saved !== undefined ? saved : lang.starter;
-    });
+    setCode(saved !== undefined ? saved : getDefaultStarter(langId, challenge));
+  };
+
+  const resetCode = () => {
+    codeByLangRef.current[language] = undefined;
+    setCode(getDefaultStarter(language, challenge));
   };
 
   if (dailyError) {
@@ -159,15 +149,15 @@ export default function Daily() {
 
   const submit = async () => {
     if (attemptsUsed >= 3) return toast.error("Out of attempts for today.");
-    if (alreadyPassed) return toast("Already solved!");
-    if (!code.trim()) return toast.error("Write a solution first!");
-    setEvaluating(true);
+    if (alreadyPassed)     return toast("Already solved!");
+    if (!code.trim())      return toast.error("Write a solution first!");
 
+    setEvaluating(true);
     try {
       const result = await apiClient.post("/ai/daily/submit", {
         challenge_id: challenge.id,
         code,
-        language,
+        language,    
         start_time: startTime,
       });
 
@@ -177,17 +167,16 @@ export default function Daily() {
         } else {
           toast.success(`+${result.xp_earned} XP earned!`);
         }
-
         const timeTaken = Math.floor((Date.now() - startTime) / 1000);
         await apiClient.post("/feed", {
           kind: "challenge",
           title: `Solved ${challenge.title}`,
-          detail: `${timeTaken}s`,
+          detail: `${timeTaken}s · ${language}`,
           xp_gained: result.xp_earned,
         });
       } else {
         toast.error(
-          `Solution didn't pass. ${3 - result.attempts_used} attempt(s) left. ${result.feedback}`
+          `Didn't pass. ${3 - result.attempts_used} attempt(s) left. ${result.feedback}`
         );
       }
 
@@ -201,57 +190,52 @@ export default function Daily() {
     }
   };
 
-  const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
-  const seconds = String(elapsed % 60).padStart(2, "0");
+  const minutes  = String(Math.floor(elapsed / 60)).padStart(2, "0");
+  const seconds  = String(elapsed % 60).padStart(2, "0");
   const concepts = parseConcepts(challenge.expected_concepts);
   const activeLang = LANGUAGES.find((l) => l.id === language);
 
   return (
     <div className="space-y-6">
+
+      {/* Header */}
       <div>
         <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground flex items-center gap-2">
           {weekly ? (
-            <>
-              <Crown className="w-3 h-3 text-gold" /> Weekly
-            </>
+            <><Crown className="w-3 h-3 text-gold" /> Weekly</>
           ) : (
-            <>
-              <Swords className="w-3 h-3 text-accent" /> Daily
-            </>
+            <><Swords className="w-3 h-3 text-accent" /> Daily</>
           )}
         </div>
         <h1 className="font-display text-4xl md:text-5xl mt-1">{challenge.title}</h1>
         <div className="flex items-center gap-3 mt-3 text-sm flex-wrap">
-          <span className="px-2 py-0.5 rounded-full bg-secondary">
-            {challenge.difficulty}
-          </span>
+          <span className="px-2 py-0.5 rounded-full bg-secondary">{challenge.difficulty}</span>
           <span className="flex items-center gap-1 text-gold">
             <Zap className="w-3.5 h-3.5" /> +{challenge.xp_reward} XP
           </span>
           <span className="flex items-center gap-1 text-accent">
             <Clock className="w-3.5 h-3.5" /> {minutes}:{seconds}
           </span>
-          <span className="text-muted-foreground">
-            Attempts: {attemptsUsed}/3
-          </span>
+          <span className="text-muted-foreground">Attempts: {attemptsUsed}/3</span>
         </div>
       </div>
 
+      {/* Problem statement */}
       <GlassCard className="p-6 neon-border">
         <div className="text-sm whitespace-pre-wrap">{challenge.prompt}</div>
         <div className="mt-3 flex flex-wrap gap-2">
           {concepts.map((c) => (
-            <span
-              key={c}
-              className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full glass"
-            >
+            <span key={c} className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full glass">
               {c}
             </span>
           ))}
         </div>
       </GlassCard>
 
+      {/* Code editor */}
       <GlassCard className="p-0 overflow-hidden">
+
+        {/* Language tabs */}
         <div className="flex items-center gap-1 px-3 pt-2 border-b border-border/60 overflow-x-auto">
           {LANGUAGES.map((lang) => (
             <button
@@ -270,23 +254,30 @@ export default function Daily() {
             {code.length} chars
           </div>
         </div>
+
+        {/* Filename bar */}
         <div className="flex items-center px-4 py-1.5 border-b border-border/40 bg-secondary/30">
           <div className="text-xs font-mono text-muted-foreground">{activeLang.filename}</div>
         </div>
+
+        {/* Editor */}
         <Textarea
           value={code}
           onChange={(e) => setCode(e.target.value)}
           className="font-mono min-h-[320px] bg-transparent border-0 rounded-none focus-visible:ring-0"
-          placeholder={activeLang.starter}
+          placeholder="Write your solution here…"
+          spellCheck={false}
         />
       </GlassCard>
 
+      {/* Out of attempts warning */}
       {attemptsUsed >= 3 && !alreadyPassed && (
         <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-3">
           <AlertTriangle className="w-4 h-4" /> Out of attempts. Try again tomorrow!
         </div>
       )}
 
+      {/* Actions */}
       <div className="flex flex-wrap gap-3">
         <Button
           onClick={submit}
@@ -301,35 +292,40 @@ export default function Daily() {
         </Button>
         <Button
           variant="outline"
-          onClick={() => setCode(activeLang.starter)}
+          onClick={resetCode}
           className="bg-transparent"
         >
           Reset code
         </Button>
       </div>
 
+      {/* Attempt history */}
       {subsList.length > 0 && (
         <GlassCard className="p-5">
           <div className="font-display text-lg mb-3">Your attempts</div>
           <div className="space-y-2">
             {subsList.map((s, i) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between text-sm"
-              >
-                <div className="flex items-center gap-2">
+              <div key={s.id} className="flex items-center justify-between text-sm gap-3">
+                <div className="flex items-center gap-2 shrink-0">
                   <span className="text-muted-foreground">#{i + 1}</span>
                   <span className={s.passed ? "text-xp" : "text-destructive"}>
                     {s.passed ? "Passed" : "Failed"}
                   </span>
+                  {/*  Show language used */}
+                  {s.language && (
+                    <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded glass text-muted-foreground">
+                      {s.language}
+                    </span>
+                  )}
                 </div>
-                <div className="text-muted-foreground text-xs">{s.ai_feedback}</div>
+                <div className="text-muted-foreground text-xs text-right">{s.ai_feedback}</div>
               </div>
             ))}
           </div>
         </GlassCard>
       )}
 
+      {/* Past challenges */}
       <div>
         <h3 className="font-display text-xl mt-6 mb-3">Past challenges</h3>
         <div className="grid md:grid-cols-2 gap-3">
@@ -349,6 +345,7 @@ export default function Daily() {
             ))}
         </div>
       </div>
+
     </div>
   );
 }
