@@ -12,6 +12,8 @@ if (API_KEYS.length === 0) {
   throw new Error("No Groq API keys found. Set GROQ_API_KEY_1 through GROQ_API_KEY_5 in .env");
 }
 
+const clients = API_KEYS.map((key) => new Groq({ apiKey: key }));
+
 const keyStats = API_KEYS.map(() => ({
   requests: 0,
   resetAt: Date.now() + 60_000,
@@ -41,7 +43,7 @@ function getClient() {
 
     stats.requests++;
     currentIndex = (idx + 1) % API_KEYS.length;
-    return { client: new Groq({ apiKey: API_KEYS[idx] }), idx };
+    return { client: clients[idx], idx };
   }
 
   const soonest = keyStats.reduce((best, s, i) => {
@@ -49,10 +51,11 @@ function getClient() {
     return wait < best.wait ? { wait, idx: i } : best;
   }, { wait: Infinity, idx: 0 });
 
-  const waitSec = Math.ceil((soonest.wait - now) / 1000);
+  const waitSec = Math.ceil((soonest.wait - Date.now()) / 1000);
   const err = new Error(`All Groq keys rate limited. Retry in ${waitSec}s`);
   err.status = 429;
   err.retryAfter = waitSec;
+  err.allKeysExhausted = true;
   throw err;
 }
 
@@ -62,13 +65,20 @@ function markRateLimited(idx, retryAfterSeconds = 60) {
 }
 
 const responseCache = new Map();
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
-async function groqChat(messages, options = {}) {
+async function groqChat(messages, options = {}, attempt = 0) {
+  const MAX_RETRIES = API_KEYS.length + 1;
+
   const cacheKey = JSON.stringify({ messages, model: options.model, temp: options.temperature });
   const cached = responseCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < 10 * 60 * 1000) {
     console.log("[Groq] Cache hit");
     return cached.value;
+  }
+
+  if (attempt >= MAX_RETRIES) {
+    throw new Error("All Groq keys exhausted after retries. Try again later.");
   }
 
   const { client, idx } = getClient();
@@ -80,17 +90,31 @@ async function groqChat(messages, options = {}) {
       temperature: options.temperature ?? 0.7,
       max_tokens: options.max_tokens ?? 1024,
     });
+
     const result = completion.choices[0]?.message?.content || "";
     responseCache.set(cacheKey, { value: result, ts: Date.now() });
     setTimeout(() => responseCache.delete(cacheKey), 10 * 60 * 1000);
     return result;
-    
+
   } catch (err) {
-    if (err?.status === 429) {
-      const retryAfter = parseInt(err?.headers?.["retry-after"] || "60");
+    const status = err?.status ?? err?.statusCode;
+
+    if (err.allKeysExhausted) throw err;
+
+    if (status === 429 || status === 503) {
+      const retryAfter = parseInt(err?.headers?.["retry-after"] || "10");
       markRateLimited(idx, retryAfter);
-      return groqChat(messages, options);
+
+      console.warn(
+        `[Groq] Key ${idx} hit ${status} — cooling down ${retryAfter}s, ` +
+        `trying next key (attempt ${attempt + 1}/${MAX_RETRIES})`
+      );
+
+      if (status === 503) await sleep(retryAfter * 1000);
+
+      return groqChat(messages, options, attempt + 1);
     }
+
     throw err;
   }
 }
