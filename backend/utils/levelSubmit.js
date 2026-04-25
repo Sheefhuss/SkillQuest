@@ -31,41 +31,23 @@ async function evaluateLevelChallenge(code, prompt, language = "javascript") {
       [
         {
           role: "system",
-          content: "You are a code evaluator. Respond with valid JSON only. No markdown. No extra text.",
+          content: "Code evaluator. Respond with valid JSON only. No markdown.",
         },
         {
           role: "user",
-          content: `Evaluate this ${language.toUpperCase()} solution for a coding challenge.
-
+          content: `Evaluate this ${language.toUpperCase()} solution.
 Challenge: ${prompt}
-LANGUAGE RULES: ${hint}
-Accept any correct working solution in ${language}. Do not apply JavaScript-specific rules to other languages.
-Only the core function is required — no main function or print statements needed.
+Rules: ${hint}
+Only the core function is needed.
 
-User's code:
+Code:
 ${code}
 
-Generate 3 to 5 representative test cases for this challenge. For each test case:
-- Simulate mentally whether the user's code would produce the correct output.
-- Mark it passed or failed accordingly.
-
-Respond with JSON only, exactly this shape:
-{
-  "passed": true or false,
-  "feedback": "one clear sentence — what is correct or what specific logic is wrong",
-  "score": 0 to 100,
-  "testCases": [
-    {
-      "input": "human-readable input, e.g. nums = [2,7,11,15], target = 9",
-      "expectedOutput": "human-readable expected output, e.g. [0, 1]",
-      "actualOutput": "what the user's code would return, e.g. [0, 1]",
-      "passed": true or false
-    }
-  ]
-}`,
+Run 3 test cases mentally. Reply ONLY with this JSON:
+{"passed":bool,"feedback":"one sentence","score":0-100,"testCases":[{"input":"...","expectedOutput":"...","actualOutput":"...","passed":bool}]}`,
         },
       ],
-      { temperature: 0.2, max_tokens: 700 }
+      { temperature: 0.1, max_tokens: 400 }
     );
 
     const parsed = JSON.parse(
@@ -109,17 +91,27 @@ function mountLevelSubmit(app, authenticateToken, User) {
         language
       );
 
+      let xp_earned = 0;
+
       if (passed) {
         const user = await User.findByPk(req.user.id);
         if (user) {
-          await user.update({
-            xp: (user.xp || 0) + 50,
-            problems_solved: (user.problems_solved || 0) + 1,
-          });
+          const alreadySolved = Array.isArray(user.solved_levels) &&
+            user.solved_levels.includes(Number(req.params.id));
+
+          if (!alreadySolved) {
+            const updatedSolved = [...(user.solved_levels || []), Number(req.params.id)];
+            await user.update({
+              xp: (user.xp || 0) + 50,
+              problems_solved: (user.problems_solved || 0) + 1,
+              solved_levels: updatedSolved,
+            });
+            xp_earned = 50;
+          }
         }
       }
 
-      res.json({ passed, feedback, score, xp_earned: passed ? 50 : 0, testCases });
+      res.json({ passed, feedback, score, xp_earned, testCases });
     } catch (err) {
       console.error("Level submit error:", err?.message, err?.stack);
       res.status(500).json({ message: "Evaluation failed.", detail: err?.message });
