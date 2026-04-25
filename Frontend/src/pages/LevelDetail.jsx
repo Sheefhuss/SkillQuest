@@ -146,7 +146,7 @@ export default function LevelDetail() {
     setEvalResult(null);
 
     try {
-      const result = await apiClient.post(`/levels/${id}/submit`, { code, language });
+      const result = await apiClient.post(`/levels/${id}/submit`, { code, language: activeLangId });
 
       setEvalResult(result);
 
@@ -345,7 +345,7 @@ export default function LevelDetail() {
                       key={lang.id}
                       onClick={() => handleLanguageSwitch(lang.id)}
                       className={`px-3 py-1.5 text-xs font-mono rounded-t transition-colors whitespace-nowrap ${
-                        language === lang.id
+                        activeLangId === lang.id
                           ? "bg-secondary text-foreground border border-b-0 border-border/60"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
