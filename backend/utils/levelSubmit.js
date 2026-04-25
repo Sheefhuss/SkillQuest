@@ -1,4 +1,4 @@
-const { groqChat } = require("./utils/groqClient");
+const { groqChat } = require("./groqClient");
 
 const IDIOM_HINTS = {
   python:     "In Python, slicing, list comprehensions, and built-ins like reversed(), sorted(), set() are all valid and idiomatic. Do NOT penalise these.",
