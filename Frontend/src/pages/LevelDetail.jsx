@@ -14,13 +14,32 @@ import { toast } from "sonner";
 import GlassCard from "@/components/game/GlassCard";
 import { BADGES } from "@/lib/game";
 
-const LANGUAGES = [
+const ALL_LANGUAGES = [
   { id: "javascript", label: "JS",     filename: "solution.js"   },
   { id: "python",     label: "Python", filename: "solution.py"   },
   { id: "java",       label: "Java",   filename: "Solution.java" },
   { id: "c",          label: "C",      filename: "solution.c"    },
   { id: "cpp",        label: "C++",    filename: "solution.cpp"  },
 ];
+
+const HTML_ONLY_IDS   = [15, 29];
+const SQL_ONLY_IDS    = [26];
+const DOCKER_ONLY_IDS = [27];
+const JS_ONLY_IDS     = [16, 17, 18, 19, 30, 31, 32, 33];
+const TEXT_ONLY_IDS   = [25, 28];
+
+const JS_ONLY_LANGS = [
+  { id: "javascript", label: "JS", filename: "solution.js" },
+];
+
+function getLanguagesForLevel(levelId) {
+  if (HTML_ONLY_IDS.includes(levelId))   return [{ id: "html",   label: "HTML",       filename: "index.html" }];
+  if (SQL_ONLY_IDS.includes(levelId))    return [{ id: "sql",    label: "SQL",        filename: "query.sql"  }];
+  if (DOCKER_ONLY_IDS.includes(levelId)) return [{ id: "docker", label: "Dockerfile", filename: "Dockerfile" }];
+  if (TEXT_ONLY_IDS.includes(levelId))   return [{ id: "text",   label: "Design",     filename: "design.txt" }];
+  if (JS_ONLY_IDS.includes(levelId))     return JS_ONLY_LANGS;
+  return ALL_LANGUAGES;
+}
 
 function getDefaultStarter(langId, starterJs = "") {
   if (langId === "javascript") return starterJs || "function solution() {\n  \n}";
@@ -52,7 +71,7 @@ export default function LevelDetail() {
   const [step, setStep]               = useState("lesson");
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizDone, setQuizDone]       = useState(false);
-  const [language, setLanguage]       = useState("javascript");
+  const [language, setLanguage]       = useState("");
   const [code, setCode]               = useState("");
   const [evaluating, setEvaluating]   = useState(false);
   const [challengeDone, setChallengeDone] = useState(false);
@@ -62,25 +81,30 @@ export default function LevelDetail() {
 
   if (!level) return <div className="text-muted-foreground">Loading…</div>;
 
+  const LANGUAGES = getLanguagesForLevel(level.id);
   const completed = (me?.completed_levels || []).includes(level.id);
   const alreadySolvedChallenge = (me?.solved_levels || []).includes(level.id);
 
   const handleLanguageSwitch = (langId) => {
-    if (langId === language) return;
-    codeByLangRef.current[language] = code;
+    if (langId === activeLangId) return;
+    codeByLangRef.current[activeLangId] = code;
     const saved = codeByLangRef.current[langId];
     setLanguage(langId);
     setCode(saved !== undefined ? saved : getDefaultStarter(langId, level.challenge_starter));
   };
 
   const resetCode = () => {
-    codeByLangRef.current[language] = undefined;
-    setCode(getDefaultStarter(language, level.challenge_starter));
+    codeByLangRef.current[activeLangId] = undefined;
+    setCode(getDefaultStarter(activeLangId, level.challenge_starter));
     setEvalResult(null);
   };
 
+  const activeLangId = language || LANGUAGES[0]?.id;
+  const activeLang = LANGUAGES.find((l) => l.id === activeLangId) || LANGUAGES[0];
+
   const initCode = () => {
-    if (!code) setCode(getDefaultStarter("javascript", level.challenge_starter));
+    if (!code) setCode(getDefaultStarter(activeLangId, level.challenge_starter));
+    if (!language) setLanguage(LANGUAGES[0]?.id);
   };
 
   const awardXP = async (amount, activity) => {
@@ -129,9 +153,9 @@ export default function LevelDetail() {
       if (result.passed) {
         setChallengeDone(true);
         if (result.xp_earned > 0) {
-          toast.success(`✅ Passed! +${result.xp_earned} XP`);
+          toast.success(`Passed! +${result.xp_earned} XP`);
         } else {
-          toast.success("✅ Passed! (XP already claimed)");
+          toast.success("Passed! (XP already claimed)");
         }
         qc.invalidateQueries({ queryKey: ["me"] });
       } else {
@@ -169,8 +193,6 @@ export default function LevelDetail() {
     { id: "challenge", label: "Challenge", icon: Code2        },
     { id: "done",      label: "Finish",    icon: CheckCircle2 },
   ];
-
-  const activeLang = LANGUAGES.find((l) => l.id === language);
 
   return (
     <div className="space-y-6">
