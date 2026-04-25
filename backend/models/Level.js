@@ -18,18 +18,16 @@ const Level = sequelize.define('Level', {
     allowNull: false,
   },
   summary: {
-    type: DataTypes.TEXT, 
+    type: DataTypes.TEXT,
   },
   video_url: {
     type: DataTypes.STRING,
-    comment: "YouTube embed URL"
   },
   reading_material: {
     type: DataTypes.TEXT,
-    comment: "Markdown content"
   },
   quiz: {
-    type: DataTypes.JSON, 
+    type: DataTypes.JSON,
   },
   challenge_prompt: {
     type: DataTypes.TEXT,
@@ -37,10 +35,18 @@ const Level = sequelize.define('Level', {
   challenge_starter: {
     type: DataTypes.TEXT,
   },
+  sample_input: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  sample_output: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   xp_reward: {
     type: DataTypes.INTEGER,
     defaultValue: 80,
-  }
+  },
 });
 
 module.exports = Level;
