@@ -63,6 +63,7 @@ export default function LevelDetail() {
   if (!level) return <div className="text-muted-foreground">Loading…</div>;
 
   const completed = (me?.completed_levels || []).includes(level.id);
+  const alreadySolvedChallenge = (me?.solved_levels || []).includes(level.id);
 
   const handleLanguageSwitch = (langId) => {
     if (langId === language) return;
@@ -121,16 +122,17 @@ export default function LevelDetail() {
     setEvalResult(null);
 
     try {
-      const result = await apiClient.post(`/levels/${id}/submit`, {
-        code,
-        language,
-      });
+      const result = await apiClient.post(`/levels/${id}/submit`, { code, language });
 
       setEvalResult(result);
 
       if (result.passed) {
         setChallengeDone(true);
-        toast.success(`✅ Passed! +${result.xp_earned} XP`);
+        if (result.xp_earned > 0) {
+          toast.success(`✅ Passed! +${result.xp_earned} XP`);
+        } else {
+          toast.success("✅ Passed! (XP already claimed)");
+        }
         qc.invalidateQueries({ queryKey: ["me"] });
       } else {
         toast.error(`❌ ${result.feedback}`);
@@ -187,7 +189,6 @@ export default function LevelDetail() {
         <p className="text-muted-foreground mt-2 max-w-2xl">{level.summary}</p>
       </div>
 
-      {/* Stepper */}
       <div className="flex flex-wrap gap-2">
         {STEPS.map((s) => {
           const Icon = s.icon;
@@ -215,7 +216,6 @@ export default function LevelDetail() {
           exit={{ opacity: 0, y: -10 }}
         >
 
-          {/* VIDEO */}
           {step === "lesson" && (
             <GlassCard className="p-5 md:p-6 space-y-4">
               <div className="aspect-video rounded-xl overflow-hidden bg-black">
@@ -230,7 +230,6 @@ export default function LevelDetail() {
             </GlassCard>
           )}
 
-          {/* READING */}
           {step === "reading" && (
             <GlassCard className="p-5 md:p-8">
               <div className="prose prose-invert max-w-none">
@@ -245,7 +244,6 @@ export default function LevelDetail() {
             </GlassCard>
           )}
 
-          {/* QUIZ */}
           {step === "quiz" && (
             <GlassCard className="p-5 md:p-8 space-y-5">
               {level.quiz?.map((q, i) => (
@@ -293,7 +291,6 @@ export default function LevelDetail() {
             </GlassCard>
           )}
 
-          {/* CHALLENGE */}
           {step === "challenge" && (
             <div className="space-y-4">
               <GlassCard className="p-5 md:p-6">
@@ -301,10 +298,25 @@ export default function LevelDetail() {
                 <div className="font-display text-xl">{level.challenge_prompt}</div>
               </GlassCard>
 
-              {/* Code editor */}
               <GlassCard className="p-0 overflow-hidden">
 
-                {/* Language tabs */}
+                {(level.sample_input || level.sample_output) && (
+                  <div className="flex gap-4 px-4 py-3 border-b border-border/40 bg-secondary/20">
+                    {level.sample_input && (
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Input</div>
+                        <pre className="text-xs font-mono text-foreground bg-black/30 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap">{level.sample_input}</pre>
+                      </div>
+                    )}
+                    {level.sample_output && (
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Expected Output</div>
+                        <pre className="text-xs font-mono text-foreground bg-black/30 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap">{level.sample_output}</pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-1 px-3 pt-2 border-b border-border/60 overflow-x-auto">
                   {LANGUAGES.map((lang) => (
                     <button
@@ -324,12 +336,10 @@ export default function LevelDetail() {
                   </div>
                 </div>
 
-                {/* Filename bar */}
                 <div className="flex items-center px-4 py-1.5 border-b border-border/40 bg-secondary/30">
                   <div className="text-xs font-mono text-muted-foreground">{activeLang.filename}</div>
                 </div>
 
-                {/* Editor */}
                 <Textarea
                   value={code}
                   onChange={(e) => { setCode(e.target.value); setEvalResult(null); }}
@@ -339,7 +349,6 @@ export default function LevelDetail() {
                 />
               </GlassCard>
 
-              {/* Eval feedback */}
               {evalResult && (
                 <div className={`flex items-start gap-3 px-4 py-3 rounded-xl text-sm ${
                   evalResult.passed
@@ -353,7 +362,32 @@ export default function LevelDetail() {
                 </div>
               )}
 
-              {/* Actions */}
+              {evalResult?.testCases?.length > 0 && (
+                <GlassCard className="p-4 space-y-2">
+                  <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Test Cases</div>
+                  {evalResult.testCases.map((tc, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-lg px-3 py-2 text-xs font-mono border ${
+                        tc.passed
+                          ? "bg-xp/5 border-xp/20 text-xp"
+                          : "bg-destructive/5 border-destructive/20 text-destructive"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {tc.passed
+                          ? <CheckCircle2 className="w-3 h-3 shrink-0" />
+                          : <AlertTriangle className="w-3 h-3 shrink-0" />}
+                        <span className="font-semibold">Test {i + 1}</span>
+                      </div>
+                      <div className="text-muted-foreground">Input: <span className="text-foreground">{tc.input}</span></div>
+                      <div className="text-muted-foreground">Expected: <span className="text-foreground">{tc.expectedOutput}</span></div>
+                      <div className="text-muted-foreground">Got: <span className="text-foreground">{tc.actualOutput}</span></div>
+                    </div>
+                  ))}
+                </GlassCard>
+              )}
+
               <div className="flex flex-wrap gap-3">
                 {!challengeDone ? (
                   <Button
@@ -361,7 +395,11 @@ export default function LevelDetail() {
                     disabled={evaluating}
                     className="bg-gradient-to-r from-primary to-accent text-primary-foreground glow-primary"
                   >
-                    {evaluating ? "Evaluating…" : "Submit solution (+50 XP)"}
+                    {evaluating
+                      ? "Evaluating…"
+                      : alreadySolvedChallenge
+                        ? "Submit solution"
+                        : "Submit solution (+50 XP)"}
                   </Button>
                 ) : (
                   <Button
@@ -371,18 +409,13 @@ export default function LevelDetail() {
                     Finalize level →
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={resetCode}
-                  className="bg-transparent"
-                >
+                <Button variant="outline" onClick={resetCode} className="bg-transparent">
                   Reset code
                 </Button>
               </div>
             </div>
           )}
 
-          {/* DONE */}
           {step === "done" && (
             <GlassCard className="p-8 text-center space-y-4">
               <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center glow-primary">
