@@ -4,16 +4,16 @@ const sequelize = require('../config/database');
 const User = sequelize.define('User', {
   username: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
   },
   email: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
+    unique: true,
   },
   password: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
   },
   display_name: {
     type: DataTypes.STRING,
@@ -37,11 +37,14 @@ const User = sequelize.define('User', {
     type: DataTypes.JSON,
     defaultValue: [],
   },
+  solved_levels: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+  },
   badges: {
     type: DataTypes.JSON,
     defaultValue: [],
   },
-
   streak_days: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
@@ -57,7 +60,6 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
-
   ai_tutor_uses_today: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
