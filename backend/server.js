@@ -14,7 +14,7 @@ const FeedPost = require('./models/FeedPost');
 const Follow = require('./models/Follow');
 const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
-
+const { mountLevelSubmit } = require('./utils/levelSubmit');
 const app = express();
 
 const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
@@ -265,6 +265,7 @@ app.post('/api/mocktests', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Error saving mock test' });
   }
 });
+mountLevelSubmit(app, authenticateToken, User);
 
 app.use((err, req, res, next) => {
   console.error(err.message);
