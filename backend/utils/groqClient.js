@@ -61,7 +61,16 @@ function markRateLimited(idx, retryAfterSeconds = 60) {
   keyStats[idx].requests = 28;
 }
 
+const responseCache = new Map();
+
 async function groqChat(messages, options = {}) {
+  const cacheKey = JSON.stringify({ messages, model: options.model, temp: options.temperature });
+  const cached = responseCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 10 * 60 * 1000) {
+    console.log("[Groq] Cache hit");
+    return cached.value;
+  }
+
   const { client, idx } = getClient();
 
   try {
@@ -71,7 +80,11 @@ async function groqChat(messages, options = {}) {
       temperature: options.temperature ?? 0.7,
       max_tokens: options.max_tokens ?? 1024,
     });
-    return completion.choices[0]?.message?.content || "";
+    const result = completion.choices[0]?.message?.content || "";
+    responseCache.set(cacheKey, { value: result, ts: Date.now() });
+    setTimeout(() => responseCache.delete(cacheKey), 10 * 60 * 1000);
+    return result;
+    
   } catch (err) {
     if (err?.status === 429) {
       const retryAfter = parseInt(err?.headers?.["retry-after"] || "60");
