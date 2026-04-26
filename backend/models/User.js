@@ -68,6 +68,26 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     defaultValue: null,
   },
+  is_verified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  verify_token: {
+    type: DataTypes.STRING,
+    defaultValue: null,
+  },
+  verify_token_expiry: {
+    type: DataTypes.DATE,
+    defaultValue: null,
+  },
+  reset_token: {
+    type: DataTypes.STRING,
+    defaultValue: null,
+  },
+  reset_token_expiry: {
+    type: DataTypes.DATE,
+    defaultValue: null,
+  },
 });
 
 module.exports = User;
