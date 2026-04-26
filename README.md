@@ -142,6 +142,6 @@ Go to `http://localhost:5173` in your browser. Register an account and you're go
 
 ## Live Demo
 
-<u> 'https://skillquest2026.netlify.app' <u>
+<u> https://skillquest2026.netlify.app <u>
 
 ---
