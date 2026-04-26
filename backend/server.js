@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const sequelize = require('./config/database');
@@ -15,6 +16,8 @@ const Follow = require('./models/Follow');
 const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
 const { mountLevelSubmit } = require('./utils/levelSubmit');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('./utils/emailService');
+
 const app = express();
 
 const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
@@ -58,35 +61,129 @@ function authenticateToken(req, res, next) {
   });
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const makeToken = () => crypto.randomBytes(32).toString('hex');
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, username } = req.body;
     if (!email || !password || !username) return res.status(400).json({ message: 'All fields required' });
-    const existing = await User.findOne({ where: { email } });
+
+    if (!EMAIL_REGEX.test(email)) return res.status(400).json({ message: 'Enter a valid email address' });
+
+    const existing = await User.findOne({ where: { email: email.toLowerCase() } });
     if (existing) return res.status(400).json({ message: 'User already exists' });
-    const user = await User.create({
-      email, password: await bcrypt.hash(password, BCRYPT_ROUNDS), username,
-      display_name: username, xp: 0, level_tier: 'Rookie',
-      activity_log: [], badges: [], completed_levels: [],
+
+    const verifyToken = makeToken();
+    const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await User.create({
+      email: email.toLowerCase(),
+      password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+      username,
+      display_name: username,
+      xp: 0,
+      level_tier: 'Rookie',
+      activity_log: [],
+      badges: [],
+      completed_levels: [],
+      is_verified: false,
+      verify_token: verifyToken,
+      verify_token_expiry: verifyTokenExpiry,
     });
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user });
+
+    await sendVerificationEmail(email.toLowerCase(), username, verifyToken);
+
+    res.status(201).json({ message: 'Account created! Check your email to verify your account.' });
   } catch (err) {
+    console.error('Register error:', err);
     res.status(500).json({ message: 'Registration error' });
+  }
+});
+
+app.get('/api/auth/verify-email', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ message: 'Token missing' });
+
+    const user = await User.findOne({ where: { verify_token: token } });
+
+    if (!user || !user.verify_token_expiry || new Date() > new Date(user.verify_token_expiry)) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?verified=fail`);
+    }
+
+    await user.update({ is_verified: true, verify_token: null, verify_token_expiry: null });
+
+    res.redirect(`${process.env.FRONTEND_URL}/login?verified=1`);
+  } catch (err) {
+    console.error('Verify error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(400).json({ message: 'Invalid credentials' });
+    }
+    if (!user.is_verified) {
+      return res.status(403).json({ message: 'Please verify your email before logging in.' });
     }
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user });
   } catch (err) {
     res.status(500).json({ message: 'Login error' });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+
+    if (!user) return res.json({ message: 'If that email is registered, a reset link has been sent.' });
+
+    const resetToken = makeToken();
+    await user.update({
+      reset_token: resetToken,
+      reset_token_expiry: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await sendPasswordResetEmail(email.toLowerCase(), user.username, resetToken);
+
+    res.json({ message: 'If that email is registered, a reset link has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password, confirmPassword } = req.body;
+    if (!token || !password || !confirmPassword) return res.status(400).json({ message: 'All fields required' });
+    if (password !== confirmPassword) return res.status(400).json({ message: 'Passwords do not match' });
+
+    const user = await User.findOne({ where: { reset_token: token } });
+
+    if (!user || !user.reset_token_expiry || new Date() > new Date(user.reset_token_expiry)) {
+      return res.status(400).json({ message: 'Invalid or expired reset link' });
+    }
+
+    await user.update({
+      password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+      reset_token: null,
+      reset_token_expiry: null,
+    });
+
+    res.json({ message: 'Password updated! You can now sign in.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -265,6 +362,7 @@ app.post('/api/mocktests', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Error saving mock test' });
   }
 });
+
 mountLevelSubmit(app, authenticateToken, User);
 
 app.use((err, req, res, next) => {
