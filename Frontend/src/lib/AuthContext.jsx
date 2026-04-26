@@ -64,10 +64,16 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (username, email, password) => {
     const res = await authApi.post('/auth/register', { username, email, password });
-    localStorage.setItem('token', res.data.token);
-    sessionStorage.setItem('sq_user', JSON.stringify(res.data.user));
-    setUser(res.data.user);
-    setIsAuthenticated(true);
+    return res.data;
+  };
+
+  const forgotPassword = async (email) => {
+    const res = await authApi.post('/auth/forgot-password', { email });
+    return res.data;
+  };
+
+  const resetPassword = async (token, password, confirmPassword) => {
+    const res = await authApi.post('/auth/reset-password', { token, password, confirmPassword });
     return res.data;
   };
 
@@ -92,7 +98,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout, deleteAccount, refreshUser }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout, deleteAccount, refreshUser, forgotPassword, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );
