@@ -147,8 +147,8 @@ Go to `http://localhost:5173` in your browser. Register an account and you're go
 ---
  ##  Team 
 
-Mahiya Haider : designing the UI, building components and making sure the experience felt clean and attractive.
-Sheefa Hussain : backend architecture, database design, API integration, deployment, testing and maintainance.
+- Mahiya Haider : designing the UI, building components and making sure the experience felt clean and attractive.
+- Sheefa Hussain : backend architecture, database design, API integration, deployment, testing and maintainance.
 
 ---
 
