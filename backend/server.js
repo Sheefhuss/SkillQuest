@@ -3,6 +3,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 require('dotenv').config();
 
 const sequelize = require('./config/database');
@@ -107,7 +108,7 @@ app.get('/api/auth/verify-email', async (req, res) => {
     const user = await User.findOne({ where: { verify_token: token } });
 
     if (!user || !user.verify_token_expiry || new Date() > new Date(user.verify_token_expiry)) {
-      return res.redirect(`${process.env.FRONTEND_URL}/login?verified=fail`);
+      return res.redirect(`${process.env.FRONTEND_URL}/?verified=fail`);
     }
 
     await user.update({ is_verified: true, verify_token: null, verify_token_expiry: null });
@@ -391,5 +392,20 @@ const PORT = process.env.PORT || 10000;
 
 sequelize.sync(process.env.NODE_ENV === 'production' ? {} : { alter: true }).then(() => {
   console.log('Database connected.');
+
+  setInterval(async () => {
+    try {
+      const deleted = await User.destroy({
+        where: {
+          is_verified: false,
+          createdAt: { [Op.lt]: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      });
+      if (deleted > 0) console.log(`Cleaned up ${deleted} unverified account(s).`);
+    } catch (err) {
+      console.error('Cleanup error:', err);
+    }
+  }, 24 * 60 * 60 * 1000);
+
   app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 }).catch(err => console.error('Database sync failed:', err));
