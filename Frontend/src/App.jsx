@@ -21,6 +21,7 @@ import Leaderboard from '@/pages/Leaderboard';
 import Feed from '@/pages/Feed';
 import Profile from '@/pages/Profile';
 import Pro from '@/pages/Pro';
+import ResetPassword from '@/pages/ResetPassword';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
@@ -41,6 +42,7 @@ const AuthenticatedApp = () => {
     return (
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<Landing />} />
       </Routes>
     );
@@ -63,6 +65,7 @@ const AuthenticatedApp = () => {
         <Route path="/profile" element={<Profile />} />
         <Route path="/pro" element={<Pro />} />
       </Route>
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
