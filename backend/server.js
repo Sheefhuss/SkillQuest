@@ -68,7 +68,6 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, username } = req.body;
     if (!email || !password || !username) return res.status(400).json({ message: 'All fields required' });
-
     if (!EMAIL_REGEX.test(email)) return res.status(400).json({ message: 'Enter a valid email address' });
 
     const existing = await User.findOne({ where: { email: email.toLowerCase() } });
@@ -93,7 +92,6 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     await sendVerificationEmail(email.toLowerCase(), username, verifyToken);
-
     res.status(201).json({ message: 'Account created! Check your email to verify your account.' });
   } catch (err) {
     console.error('Register error:', err);
@@ -113,8 +111,7 @@ app.get('/api/auth/verify-email', async (req, res) => {
     }
 
     await user.update({ is_verified: true, verify_token: null, verify_token_expiry: null });
-
-    res.redirect(`${process.env.FRONTEND_URL}/login?verified=1`);
+    res.redirect(`${process.env.FRONTEND_URL}/?verified=1`);
   } catch (err) {
     console.error('Verify error:', err);
     res.status(500).json({ message: 'Server error' });
@@ -144,7 +141,6 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     if (!email) return res.status(400).json({ message: 'Email is required' });
 
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
-
     if (!user) return res.json({ message: 'If that email is registered, a reset link has been sent.' });
 
     const resetToken = makeToken();
@@ -154,7 +150,6 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     });
 
     await sendPasswordResetEmail(email.toLowerCase(), user.username, resetToken);
-
     res.json({ message: 'If that email is registered, a reset link has been sent.' });
   } catch (err) {
     console.error('Forgot password error:', err);
@@ -168,9 +163,7 @@ app.post('/api/auth/resend-verification', async (req, res) => {
     if (!email) return res.status(400).json({ message: 'Email is required' });
 
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
-
     if (!user) return res.json({ message: 'If that email is registered, a verification link has been sent.' });
-
     if (user.is_verified) return res.status(400).json({ message: 'This account is already verified. Please sign in.' });
 
     const verifyToken = makeToken();
@@ -180,7 +173,6 @@ app.post('/api/auth/resend-verification', async (req, res) => {
     });
 
     await sendVerificationEmail(email.toLowerCase(), user.username, verifyToken);
-
     res.json({ message: 'Verification email resent! Check your inbox.' });
   } catch (err) {
     console.error('Resend verification error:', err);
@@ -195,7 +187,6 @@ app.post('/api/auth/reset-password', async (req, res) => {
     if (password !== confirmPassword) return res.status(400).json({ message: 'Passwords do not match' });
 
     const user = await User.findOne({ where: { reset_token: token } });
-
     if (!user || !user.reset_token_expiry || new Date() > new Date(user.reset_token_expiry)) {
       return res.status(400).json({ message: 'Invalid or expired reset link' });
     }
