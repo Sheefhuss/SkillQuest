@@ -145,7 +145,7 @@ Go to `http://localhost:5173` in your browser. Register an account and you're go
 <u> https://skillquest2026.netlify.app <u>
 
 ---
-## ** Team **
+** ##  Team **
 
 Mahiya Haider : designing the UI, building components and making sure the experience felt clean and attractive.
 Sheefa Hussain : backend architecture, database design, API integration, deployment, testing and maintainance.
@@ -153,7 +153,8 @@ Sheefa Hussain : backend architecture, database design, API integration, deploym
 ---
 
 ## Known Bugs & Limitations
-We're on the free tier
+
+We're on the free tier :
          ● the server spins down after inactivity.( refresh requires sometime for update ).
          ● Can't handle millions user at once (load balancing not fully developed)
 ---
