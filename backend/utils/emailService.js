@@ -9,7 +9,7 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendVerificationEmail = async (toEmail, username, token) => {
-  const link = `${process.env.APP_URL}/verify-email?token=${token}`;
+  const link = `${process.env.BACKEND_URL}/api/auth/verify-email?token=${token}`;
   await transporter.sendMail({
     from: `"SkillQuest" <${process.env.GMAIL_USER}>`,
     to: toEmail,
@@ -27,7 +27,7 @@ const sendVerificationEmail = async (toEmail, username, token) => {
 };
 
 const sendPasswordResetEmail = async (toEmail, username, token) => {
-  const link = `${process.env.APP_URL}/reset-password?token=${token}`;
+  const link = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
   await transporter.sendMail({
     from: `"SkillQuest" <${process.env.GMAIL_USER}>`,
     to: toEmail,
