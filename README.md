@@ -136,7 +136,7 @@ npm run dev
 
 **4. Open the app**
 
-Go to `http://localhost:5173` in your browser. Register an account and you're good to go.
+Go to `http://localhost:5173` in your browser. Register an account
 
 ---
 
