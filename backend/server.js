@@ -162,6 +162,32 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   }
 });
 
+app.post('/api/auth/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+
+    if (!user) return res.json({ message: 'If that email is registered, a verification link has been sent.' });
+
+    if (user.is_verified) return res.status(400).json({ message: 'This account is already verified. Please sign in.' });
+
+    const verifyToken = makeToken();
+    await user.update({
+      verify_token: verifyToken,
+      verify_token_expiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    await sendVerificationEmail(email.toLowerCase(), user.username, verifyToken);
+
+    res.json({ message: 'Verification email resent! Check your inbox.' });
+  } catch (err) {
+    console.error('Resend verification error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const { token, password, confirmPassword } = req.body;
