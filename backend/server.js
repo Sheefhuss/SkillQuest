@@ -43,7 +43,28 @@ app.get('/', (req, res) => res.send('SkillQuest API is live!'));
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'skillquest_secret_key';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.warn('WARNING: JWT_SECRET is not set. Using insecure default — set this in your environment!');
+}
 const BCRYPT_ROUNDS = process.env.NODE_ENV === 'production' ? 8 : 10;
+
+// simple in-memory rate limiter for login — no extra deps needed
+const loginAttempts = new Map();
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip) || { count: 0, resetAt: now + 15 * 60 * 1000 };
+  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 15 * 60 * 1000; }
+  entry.count++;
+  loginAttempts.set(ip, entry);
+  return entry.count > 10; // block after 10 attempts per 15 min
+}
+// clean up stale entries every hour so it doesn't grow forever
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of loginAttempts) {
+    if (now > entry.resetAt) loginAttempts.delete(ip);
+  }
+}, 60 * 60 * 1000);
 
 const cache = new Map();
 
@@ -121,6 +142,10 @@ app.get('/api/auth/verify-email', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    if (checkLoginRateLimit(ip)) {
+      return res.status(429).json({ message: 'Too many login attempts. Try again in 15 minutes.' });
+    }
     const { email, password } = req.body;
     const user = await User.findOne({ where: { email: email.toLowerCase() } });
     if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -215,9 +240,16 @@ app.get(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) =
   }
 });
 
+const ALLOWED_PROFILE_FIELDS = ['display_name', 'bio'];
+
 app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) => {
   try {
-    await User.update(req.body, { where: { id: req.user.id } });
+    const updates = {};
+    for (const field of ALLOWED_PROFILE_FIELDS) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+    if (Object.keys(updates).length === 0) return res.status(400).json({ message: 'Nothing to update' });
+    await User.update(updates, { where: { id: req.user.id } });
     res.json(await User.findByPk(req.user.id));
   } catch (err) {
     res.status(500).json({ message: 'Update failed' });
@@ -280,7 +312,12 @@ app.get('/api/levels/:id', async (req, res) => {
 
 app.get('/api/submissions', async (req, res) => {
   try {
-    res.json(await Submission.findAll({ where: req.query, order: [['createdAt', 'DESC']] }));
+    const allowed = ['user_email', 'level_id', 'track_slug'];
+    const where = {};
+    for (const key of allowed) {
+      if (req.query[key]) where[key] = req.query[key];
+    }
+    res.json(await Submission.findAll({ where, order: [['createdAt', 'DESC']] }));
   } catch (err) {
     res.status(500).json({ message: 'Error fetching submissions' });
   }
@@ -390,7 +427,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 10000;
 
-sequelize.sync(process.env.NODE_ENV === 'production' ? {} : { alter: true }).then(() => {
+sequelize.sync(process.env.NODE_ENV === 'production' ? { force: false } : { alter: true }).then(() => {
   console.log('Database connected.');
 
   setInterval(async () => {
