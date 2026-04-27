@@ -20,8 +20,11 @@ export default function AuthModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
-  const { login, register, forgotPassword } = useAuth();
+  const { login, register, forgotPassword, resendVerification } = useAuth();
 
   const reset = (nextMode) => {
     setMode(nextMode);
@@ -33,11 +36,26 @@ export default function AuthModal({ isOpen, onClose }) {
     setShowConfirm(false);
     setRegistered(false);
     setForgotSent(false);
+    setUnverifiedEmail(null);
+    setResendSent(false);
   };
 
   const handleClose = () => {
     reset(MODES.LOGIN);
     onClose();
+  };
+
+  const handleResend = async () => {
+    setResendLoading(true);
+    try {
+      await resendVerification(unverifiedEmail);
+      setResendSent(true);
+      toast.success("Verification email resent! Check your inbox.");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to resend. Try again.");
+    } finally {
+      setResendLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -57,14 +75,8 @@ export default function AuthModal({ isOpen, onClose }) {
     }
 
     if (mode === MODES.REGISTER) {
-      if (password.length < 6) {
-        toast.error("Password must be at least 6 characters.");
-        return;
-      }
-      if (password !== confirmPassword) {
-        toast.error("Passwords do not match.");
-        return;
-      }
+      if (password.length < 6) { toast.error("Password must be at least 6 characters."); return; }
+      if (password !== confirmPassword) { toast.error("Passwords do not match."); return; }
     }
 
     setLoading(true);
@@ -78,7 +90,12 @@ export default function AuthModal({ isOpen, onClose }) {
         setRegistered(true);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Authentication failed");
+      const msg = err.response?.data?.message || "Authentication failed";
+      if (err.response?.status === 403 && msg.toLowerCase().includes('verify')) {
+        setUnverifiedEmail(email);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -107,27 +124,44 @@ export default function AuthModal({ isOpen, onClose }) {
             className="relative w-full max-w-md"
           >
             <GlassCard className="p-8 neon-border relative overflow-hidden">
-              <button
-                onClick={handleClose}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
-              >
+              <button onClick={handleClose} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
                 <X className="w-5 h-5" />
               </button>
 
               <h2 className="font-display text-3xl mb-2">{title}</h2>
               <p className="text-muted-foreground text-sm mb-6">{subtitle}</p>
 
-              {registered ? (
+              {unverifiedEmail ? (
+                <div className="text-center space-y-4 py-4">
+                  <div className="text-5xl">📧</div>
+                  <p className="text-foreground font-medium">Email not verified</p>
+                  <p className="text-muted-foreground text-sm">
+                    Your account for <strong>{unverifiedEmail}</strong> is not verified yet. Check your inbox or resend the verification email.
+                  </p>
+                  {resendSent ? (
+                    <p className="text-xp text-sm font-medium">✓ Verification email sent! Check your inbox.</p>
+                  ) : (
+                    <Button
+                      onClick={handleResend}
+                      disabled={resendLoading}
+                      className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12"
+                    >
+                      {resendLoading ? "Sending…" : "Resend Verification Email"}
+                      {!resendLoading && <ArrowRight className="w-4 h-4 ml-2" />}
+                    </Button>
+                  )}
+                  <button onClick={() => setUnverifiedEmail(null)} className="text-sm text-muted-foreground hover:text-accent transition-colors">
+                    Back to Sign In
+                  </button>
+                </div>
+              ) : registered ? (
                 <div className="text-center space-y-4 py-4">
                   <div className="text-5xl">📧</div>
                   <p className="text-foreground font-medium">Check your inbox!</p>
                   <p className="text-muted-foreground text-sm">
                     We sent a verification link to <strong>{email}</strong>. Click it to activate your account, then sign in.
                   </p>
-                  <Button
-                    onClick={() => reset(MODES.LOGIN)}
-                    className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12 mt-2"
-                  >
+                  <Button onClick={() => reset(MODES.LOGIN)} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12 mt-2">
                     Go to Sign In
                   </Button>
                 </div>
@@ -138,10 +172,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   <p className="text-muted-foreground text-sm">
                     If <strong>{email}</strong> is registered, you'll receive a password reset link shortly.
                   </p>
-                  <Button
-                    onClick={() => reset(MODES.LOGIN)}
-                    className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12 mt-2"
-                  >
+                  <Button onClick={() => reset(MODES.LOGIN)} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12 mt-2">
                     Back to Sign In
                   </Button>
                 </div>
@@ -153,13 +184,7 @@ export default function AuthModal({ isOpen, onClose }) {
                       <label className="text-xs uppercase tracking-widest text-muted-foreground ml-1">Username</label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          value={username}
-                          onChange={(e) => setUsername(e.target.value)}
-                          className="pl-10 bg-secondary/40 border-border"
-                          placeholder="codemaster"
-                          required
-                        />
+                        <Input value={username} onChange={(e) => setUsername(e.target.value)} className="pl-10 bg-secondary/40 border-border" placeholder="codemaster" required />
                       </div>
                     </div>
                   )}
@@ -168,14 +193,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     <label className="text-xs uppercase tracking-widest text-muted-foreground ml-1">Email</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="pl-10 bg-secondary/40 border-border"
-                        placeholder="you@example.com"
-                        required
-                      />
+                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10 bg-secondary/40 border-border" placeholder="you@example.com" required />
                     </div>
                   </div>
 
@@ -192,21 +210,13 @@ export default function AuthModal({ isOpen, onClose }) {
                           placeholder="••••••••"
                           required
                         />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        >
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                       {mode === MODES.LOGIN && (
                         <div className="text-right">
-                          <button
-                            type="button"
-                            onClick={() => reset(MODES.FORGOT)}
-                            className="text-xs text-muted-foreground hover:text-accent transition-colors mt-1"
-                          >
+                          <button type="button" onClick={() => reset(MODES.FORGOT)} className="text-xs text-muted-foreground hover:text-accent transition-colors mt-1">
                             Forgot password?
                           </button>
                         </div>
@@ -233,11 +243,7 @@ export default function AuthModal({ isOpen, onClose }) {
                           placeholder="••••••••"
                           required
                         />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirm(!showConfirm)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        >
+                        <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                           {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
@@ -249,31 +255,27 @@ export default function AuthModal({ isOpen, onClose }) {
                     </div>
                   )}
 
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12 glow-primary mt-4"
-                  >
+                  <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground h-12 glow-primary mt-4">
                     {loading ? "Please wait…" : mode === MODES.LOGIN ? "Sign In" : mode === MODES.REGISTER ? "Register" : "Send Reset Link"}
                     {!loading && <ArrowRight className="w-4 h-4 ml-2" />}
                   </Button>
                 </form>
               )}
 
-              {!registered && !forgotSent && (
-                <div className="mt-6 text-center space-y-2">
+              {!registered && !forgotSent && !unverifiedEmail && (
+                <div className="mt-6 text-center">
                   {mode === MODES.LOGIN && (
-                    <button onClick={() => reset(MODES.REGISTER)} className="text-sm text-muted-foreground hover:text-accent transition-colors block w-full">
+                    <button onClick={() => reset(MODES.REGISTER)} className="text-sm text-muted-foreground hover:text-accent transition-colors">
                       Don't have an account? Register
                     </button>
                   )}
                   {mode === MODES.REGISTER && (
-                    <button onClick={() => reset(MODES.LOGIN)} className="text-sm text-muted-foreground hover:text-accent transition-colors block w-full">
+                    <button onClick={() => reset(MODES.LOGIN)} className="text-sm text-muted-foreground hover:text-accent transition-colors">
                       Already have an account? Sign in
                     </button>
                   )}
                   {mode === MODES.FORGOT && (
-                    <button onClick={() => reset(MODES.LOGIN)} className="text-sm text-muted-foreground hover:text-accent transition-colors block w-full">
+                    <button onClick={() => reset(MODES.LOGIN)} className="text-sm text-muted-foreground hover:text-accent transition-colors">
                       Back to Sign In
                     </button>
                   )}
