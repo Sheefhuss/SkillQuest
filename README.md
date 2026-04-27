@@ -145,6 +145,11 @@ Go to `http://localhost:5173` in your browser. Register an account and you're go
 <u> https://skillquest2026.netlify.app <u>
 
 ---
+## Test Account
+
+- **Email:** judgeskillquest@gmail.com  
+- **Password:** Judge@1234
+  
  ##  Team 
 
 - Mahiya Haider : designing the UI, building components and making sure the experience felt clean and attractive.
