@@ -77,6 +77,11 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const resendVerification = async (email) => {
+    const res = await authApi.post('/auth/resend-verification', { email });
+    return res.data;
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     sessionStorage.removeItem('sq_user');
@@ -98,7 +103,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout, deleteAccount, refreshUser, forgotPassword, resetPassword }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, register, logout, deleteAccount, refreshUser, forgotPassword, resetPassword, resendVerification }}>
       {children}
     </AuthContext.Provider>
   );
