@@ -155,6 +155,6 @@ Go to `http://localhost:5173` in your browser. Register an account and you're go
 ## Known Bugs & Limitations
 
         We're on the free tier :
-         ● the server spins down after inactivity.( refresh requires sometime for update ).
+         ● the server spins down after inactivity.( refresh requires sometime for updates ).
          ● Can't handle millions user at once (load balancing not fully developed)
 ---
