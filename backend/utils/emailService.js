@@ -3,7 +3,10 @@ const https = require('https');
 const brevoRequest = (to, subject, html) => {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
-      sender: { name: 'SkillQuest', email: 'hussainsheefa16@gmail.com' },
+      sender: { 
+        name: process.env.BREVO_SENDER_NAME, 
+        email: process.env.BREVO_SENDER_EMAIL 
+      },
       to: [{ email: to }],
       subject,
       htmlContent: html,
