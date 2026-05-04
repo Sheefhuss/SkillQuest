@@ -55,6 +55,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await authApi.post('/auth/login', { email, password });
+    sessionStorage.clear();
     localStorage.setItem('token', res.data.token);
     sessionStorage.setItem('sq_user', JSON.stringify(res.data.user));
     setUser(res.data.user);
