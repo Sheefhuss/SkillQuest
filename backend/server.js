@@ -238,7 +238,7 @@ app.get(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) =
   }
 });
 
-const ALLOWED_PROFILE_FIELDS = ['display_name', 'bio'];
+const ALLOWED_PROFILE_FIELDS = ['display_name', 'bio', 'xp', 'badges'];
 
 app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) => {
   try {
