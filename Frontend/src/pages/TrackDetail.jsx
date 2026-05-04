@@ -23,12 +23,13 @@ export default function TrackDetail() {
   const { data: allLevels = [] } = useQuery({
     queryKey: ["levels"],
     queryFn: () => apiClient.get("/levels"),
-});
+  });
+
   const levels = allLevels.filter((l) => l.track_slug === slug);
   const track = tracks.find((t) => t.slug === slug);
   if (!track) return <div className="text-muted-foreground">Loading…</div>;
 
-  const completed = new Set(me?.completed_levels || []);
+  const completed = new Set((me?.completed_levels || []).map(Number));
 
   return (
     <div className="space-y-6">
@@ -62,8 +63,8 @@ export default function TrackDetail() {
       <div className="space-y-3">
         {levels.map((lvl, i) => {
           const prev = levels[i - 1];
-          const locked = i > 0 && prev && !completed.has(prev.id);
-          const done = completed.has(lvl.id);
+          const locked = i > 0 && prev && !completed.has(Number(prev.id));
+          const done = completed.has(Number(lvl.id));
 
           return (
             <motion.div
