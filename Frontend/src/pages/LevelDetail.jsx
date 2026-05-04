@@ -82,8 +82,8 @@ export default function LevelDetail() {
   if (!level) return <div className="text-muted-foreground">Loading…</div>;
 
   const LANGUAGES = getLanguagesForLevel(level.id);
-  const completed = (me?.completed_levels || []).includes(level.id);
-  const alreadySolvedChallenge = (me?.solved_levels || []).includes(level.id);
+  const completed = (me?.completed_levels || []).map(Number).includes(Number(level.id));
+  const alreadySolvedChallenge = completed;
 
   const handleLanguageSwitch = (langId) => {
     if (langId === activeLangId) return;
@@ -171,16 +171,18 @@ export default function LevelDetail() {
 
   const finishLevel = async () => {
     if (completed) return nav(-1);
+
     await apiClient.patch("/users/me", {
-      completed_levels: [...(me?.completed_levels || []), level.id],
-      xp: (me?.xp || 0) + level.xp_reward,
+      completed_levels: [...(me?.completed_levels || []).map(Number), Number(level.id)],
     });
+
     await apiClient.post("/feed", {
       kind: "level_up",
       title: `Completed: ${level.title}`,
       detail: level.summary,
       xp_gained: level.xp_reward,
     });
+
     toast.success(`Level complete! +${level.xp_reward} XP`);
     qc.invalidateQueries({ queryKey: ["me"] });
     nav(-1);
