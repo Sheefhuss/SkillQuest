@@ -72,7 +72,13 @@ export default function Profile() {
                   <TierBadge xp={xp} />
                 </div>
                 {me.bio && <p className="text-sm mt-3 max-w-xl">{me.bio}</p>}
-                <Button onClick={() => setEditing(true)} variant="outline" size="sm" className="mt-3 bg-transparent border-border">
+                <Button onClick={() => {
+                  setForm({ 
+                    display_name: me.display_name || me.username || '', 
+                    bio: me.bio || '' 
+                  });
+                  setEditing(true);
+                }} variant="outline" size="sm" className="mt-3 bg-transparent border-border">
                   <Edit3 className="w-3.5 h-3.5 mr-1" /> Edit profile
                 </Button>
               </>
