@@ -48,7 +48,6 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
 }
 const BCRYPT_ROUNDS = process.env.NODE_ENV === 'production' ? 8 : 10;
 
-// simple in-memory rate limiter for login — no extra deps needed
 const loginAttempts = new Map();
 function checkLoginRateLimit(ip) {
   const now = Date.now();
@@ -56,9 +55,8 @@ function checkLoginRateLimit(ip) {
   if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 15 * 60 * 1000; }
   entry.count++;
   loginAttempts.set(ip, entry);
-  return entry.count > 10; // block after 10 attempts per 15 min
+  return entry.count > 20; 
 }
-// clean up stale entries every hour so it doesn't grow forever
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of loginAttempts) {
