@@ -23,13 +23,11 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
-
     const token = localStorage.getItem('token');
     if (!token) {
       setIsLoading(false);
       return;
     }
-
     const cached = sessionStorage.getItem('sq_user');
     if (cached) {
       try {
@@ -39,7 +37,6 @@ export const AuthProvider = ({ children }) => {
         return;
       } catch {}
     }
-
     authApi.get('/auth/me')
       .then(res => {
         setUser(res.data);
