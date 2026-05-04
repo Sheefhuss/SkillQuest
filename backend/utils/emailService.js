@@ -1,17 +1,11 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendVerificationEmail = async (toEmail, username, token) => {
   const link = `${process.env.BACKEND_URL}/api/auth/verify-email?token=${token}`;
-  await transporter.sendMail({
-    from: `"SkillQuest" <${process.env.GMAIL_USER}>`,
+  await resend.emails.send({
+    from: 'SkillQuest <onboarding@resend.dev>',
     to: toEmail,
     subject: 'Verify your SkillQuest email',
     html: `
@@ -28,8 +22,8 @@ const sendVerificationEmail = async (toEmail, username, token) => {
 
 const sendPasswordResetEmail = async (toEmail, username, token) => {
   const link = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-  await transporter.sendMail({
-    from: `"SkillQuest" <${process.env.GMAIL_USER}>`,
+  await resend.emails.send({
+    from: 'SkillQuest <onboarding@resend.dev>',
     to: toEmail,
     subject: 'Reset your SkillQuest password',
     html: `
