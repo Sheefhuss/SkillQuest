@@ -13,13 +13,10 @@ const IDIOM_HINTS = {
 };
 
 const TEXT_LANGUAGES = ["html", "sql", "docker", "text"];
-
 const evalCache = new Map();
 
 function isValidSubmission(code, language) {
-  if (TEXT_LANGUAGES.includes(language)) {
-    return code.trim().length > 20;
-  }
+  if (TEXT_LANGUAGES.includes(language)) return code.trim().length > 20;
   return code.trim().length > 20 && /[=(){};:\[\]]/.test(code);
 }
 
@@ -74,10 +71,9 @@ Check 3 required instructions. Reply ONLY with this JSON:
 {"passed":bool,"feedback":"one sentence","score":0-100,"testCases":[{"input":"requirement","expectedOutput":"expected instruction","actualOutput":"what the Dockerfile has","passed":bool}]}`;
   }
 
-  const hint2 = IDIOM_HINTS[language] || `Accept idiomatic ${language} solutions.`;
   return `Evaluate this ${language.toUpperCase()} solution.
 Challenge: ${prompt}
-Rules: ${hint2}
+Rules: ${hint}
 Only the core function is needed.
 
 Code:
@@ -136,6 +132,27 @@ async function evaluateLevelChallenge(code, prompt, language = "javascript") {
   }
 }
 
+// ── Streak helper ────────────────────────────────────────────────────────────
+function todayUTC() {
+  return new Date().toISOString().slice(0, 10); // "2026-05-04"
+}
+
+function updateStreak(user) {
+  const today     = todayUTC();
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const last      = user.last_active_date
+    ? new Date(user.last_active_date).toISOString().slice(0, 10)
+    : null;
+
+  if (last === today) return {};           // already active today, no change
+
+  return {
+    streak_days:      last === yesterday ? (user.streak_days || 0) + 1 : 1,
+    last_active_date: today,
+  };
+}
+
+// ── Mount route ──────────────────────────────────────────────────────────────
 function mountLevelSubmit(app, authenticateToken, User) {
   app.post("/api/levels/:id/submit", authenticateToken, async (req, res) => {
     try {
@@ -157,17 +174,25 @@ function mountLevelSubmit(app, authenticateToken, User) {
       if (passed) {
         const user = await User.findByPk(req.user.id);
         if (user) {
-          const alreadySolved = Array.isArray(user.solved_levels) &&
-            user.solved_levels.includes(Number(req.params.id));
+          const levelId = Number(req.params.id);
+
+          const alreadySolved = Array.isArray(user.completed_levels) &&
+            user.completed_levels.includes(levelId);
+
+          const streakUpdate = updateStreak(user);
 
           if (!alreadySolved) {
-            const updatedSolved = [...(user.solved_levels || []), Number(req.params.id)];
+            const updatedCompleted = [...(user.completed_levels || []), levelId];
+
             await user.update({
-              xp: (user.xp || 0) + 50,
-              problems_solved: (user.problems_solved || 0) + 1,
-              solved_levels: updatedSolved,
+              xp:               (user.xp || 0) + 50,
+              problems_solved:  (user.problems_solved || 0) + 1,
+              completed_levels: updatedCompleted,   
+              ...streakUpdate,                      
             });
             xp_earned = 50;
+          } else if (Object.keys(streakUpdate).length) {
+            await user.update(streakUpdate);
           }
         }
       }
