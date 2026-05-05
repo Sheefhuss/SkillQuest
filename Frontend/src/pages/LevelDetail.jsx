@@ -106,9 +106,13 @@ export default function LevelDetail() {
     if (!code) setCode(getDefaultStarter(activeLangId, level.challenge_starter));
     if (!language) setLanguage(LANGUAGES[0]?.id);
   };
-
-  const awardXP = async (amount, activity) => {
-    await apiClient.patch("/users/me", { xp: (me?.xp || 0) + amount });
+  const awardXP = async (amount, activity, { levelId, activity: activityKey } = {}) => {
+    const res = await apiClient.post("/users/me/award-xp", {
+      amount,
+      level_id: levelId,
+      activity: activityKey,
+    });
+    if (res?.awarded === false) return;
     toast.success(`+${amount} XP — ${activity}`);
     qc.invalidateQueries({ queryKey: ["me"] });
   };
@@ -118,7 +122,7 @@ export default function LevelDetail() {
       (acc, q, i) => acc + (quizAnswers[i] === q.correct_index ? 1 : 0), 0
     );
     setQuizDone(true);
-    await awardXP(20, "Quiz completed");
+    await awardXP(20, "Quiz completed", { levelId: level.id, activity: "quiz" });
     toast.success(`You scored ${score}/${level.quiz.length}`);
   };
 
@@ -129,7 +133,7 @@ export default function LevelDetail() {
       });
       toast.success(`🏅 Badge earned: ${BADGES.first_lesson?.name || "First Lesson"}`);
     }
-    await awardXP(10, "Lesson watched");
+    await awardXP(10, "Lesson watched", { levelId: level.id, activity: "lesson" });
     setStep("reading");
   };
 
@@ -175,6 +179,11 @@ export default function LevelDetail() {
     await apiClient.patch("/users/me", {
       completed_levels: [...(me?.completed_levels || []).map(Number), Number(level.id)],
     });
+    
+    await awardXP(level.xp_reward, `Level complete: ${level.title}`, {
+      levelId: level.id,
+      activity: "level_complete",
+    });
 
     await apiClient.post("/feed", {
       kind: "level_up",
@@ -183,7 +192,6 @@ export default function LevelDetail() {
       xp_gained: level.xp_reward,
     });
 
-    toast.success(`Level complete! +${level.xp_reward} XP`);
     qc.invalidateQueries({ queryKey: ["me"] });
     nav(-1);
   };
