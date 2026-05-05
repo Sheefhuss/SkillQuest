@@ -16,6 +16,7 @@ const FeedPost = require('./models/FeedPost');
 const Follow = require('./models/Follow');
 const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
+const XpEvent  = require('./models/XpEvent');    // idempotency log for XP awards
 const { mountLevelSubmit } = require('./utils/levelSubmit');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('./utils/emailService');
 
@@ -238,10 +239,42 @@ app.get(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) =
 });
 
 const ALLOWED_PROFILE_FIELDS = [
-  'display_name', 'bio', 'xp', 'badges', 'is_pro',
+  'display_name', 'bio', 'badges', 'is_pro',
   'ai_tutor_uses_today', 'ai_tutor_date',
   'completed_levels', 'streak_days', 'last_active_date',
 ];
+
+const XP_TIERS = [
+  { min: 0,    tier: 'Rookie'   },
+  { min: 200,  tier: 'Learner'  },
+  { min: 500,  tier: 'Builder'  },
+  { min: 1000, tier: 'Expert'   },
+  { min: 2000, tier: 'Master'   },
+];
+
+function tierForXp(xp) {
+  let result = XP_TIERS[0].tier;
+  for (const { min, tier } of XP_TIERS) {
+    if (xp >= min) result = tier;
+  }
+  return result;
+}
+
+async function awardXP(userId, amount, countsProblem = false) {
+  if (!amount || amount <= 0) return;
+
+  const incrementFields = { xp: sequelize.literal(`xp + ${Number(amount)}`) };
+  if (countsProblem) {
+    incrementFields.problems_solved = sequelize.literal('problems_solved + 1');
+  }
+  await User.update(incrementFields, { where: { id: userId } });
+
+  const user = await User.findByPk(userId, { attributes: ['xp'] });
+  if (user) {
+    const newTier = tierForXp(user.xp);
+    await User.update({ level_tier: newTier }, { where: { id: userId } });
+  }
+}
 
 app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) => {
   try {
@@ -254,6 +287,33 @@ app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res)
     res.json(await User.findByPk(req.user.id));
   } catch (err) {
     res.status(500).json({ message: 'Update failed' });
+  }
+});
+app.post('/api/users/me/award-xp', authenticateToken, async (req, res) => {
+  try {
+    const amount = parseInt(req.body.amount, 10);
+    if (!amount || amount <= 0 || amount > 10000) {
+      return res.status(400).json({ message: 'Invalid XP amount' });
+    }
+
+    const levelId   = req.body.level_id  ? parseInt(req.body.level_id, 10) : null;
+    const activity  = req.body.activity  || null;   
+    const countsProblem = req.body.counts_problem === true;
+    if (levelId && activity) {
+      const [event, created] = await XpEvent.findOrCreate({
+        where: { user_id: req.user.id, level_id: levelId, activity },
+        defaults: { user_id: req.user.id, level_id: levelId, activity },
+      });
+      if (!created) {
+        return res.json({ awarded: false, user: await User.findByPk(req.user.id) });
+      }
+    }
+
+    await awardXP(req.user.id, amount, countsProblem);
+    res.json({ awarded: true, user: await User.findByPk(req.user.id) });
+  } catch (err) {
+    console.error('Award XP error:', err);
+    res.status(500).json({ message: 'Failed to award XP' });
   }
 });
 
@@ -314,10 +374,10 @@ app.get('/api/levels/:id', async (req, res) => {
   }
 });
 
-app.get('/api/submissions', async (req, res) => {
+app.get('/api/submissions', authenticateToken, async (req, res) => {
   try {
-    const allowed = ['user_email', 'level_id', 'track_slug'];
-    const where = {};
+    const allowed = ['level_id', 'track_slug'];
+    const where = { user_email: req.user.email }; // always scope to the authed user
     for (const key of allowed) {
       if (req.query[key]) where[key] = req.query[key];
     }
@@ -423,7 +483,7 @@ app.post('/api/mocktests', authenticateToken, async (req, res) => {
   }
 });
 
-mountLevelSubmit(app, authenticateToken, User);
+mountLevelSubmit(app, authenticateToken, User, awardXP);
 
 app.use((err, req, res, next) => {
   console.error(err.message);
