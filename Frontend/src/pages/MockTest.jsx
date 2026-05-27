@@ -81,14 +81,21 @@ export default function MockTest() {
     setQuestions(graded);
     setScore(correct);
     setPhase("done");
+
+    const xpEarned = correct * 10;
     try {
       await apiClient.post("/mocktests", {
         track_slug: trackSlug, tier,
         questions: graded, score: correct, total: questions.length, time_seconds: elapsed,
       });
-      await apiClient.patch("/users/me", { xp: (me?.xp || 0) + correct * 10 });
+      if (xpEarned > 0) {
+        await apiClient.post("/users/me/award-xp", {
+          amount: xpEarned,
+          activity: `mocktest_${trackSlug}_${tier}`,
+        });
+      }
     } catch (_) {}
-    toast.success(`Scored ${correct}/${questions.length} · +${correct * 10} XP`);
+    toast.success(`Scored ${correct}/${questions.length} · +${xpEarned} XP`);
   };
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
