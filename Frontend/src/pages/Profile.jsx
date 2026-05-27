@@ -28,7 +28,13 @@ export default function Profile() {
   if (!me) return null;
   const xp = me.xp || 0;
   const tier = getTierFromXp(xp);
-  const activity = new Set(me.activity_log || []);
+  const activityLog = Array.isArray(me.activity_log) ? me.activity_log : [];
+  const activityMap = activityLog.reduce((acc, entry) => {
+    const date = typeof entry === 'string' ? entry : entry?.date;
+    if (!date) return acc;
+    acc[date] = (acc[date] || 0) + (entry?.xp || 1);
+    return acc;
+  }, {});
 
   const save = async () => {
     await apiClient.patch('/auth/me', form);
@@ -39,10 +45,11 @@ export default function Profile() {
   const days = [];
   const today = new Date();
   for (let i = 83; i >= 0; i--) {
-    const d = new Date(today); 
+    const d = new Date(today);
     d.setDate(d.getDate() - i);
     const key = d.toISOString().split("T")[0];
-    days.push({ key, active: activity.has(key) });
+    const xpToday = activityMap[key] || 0;
+    days.push({ key, xp: xpToday });
   }
 
   return (
@@ -104,11 +111,21 @@ export default function Profile() {
       <GlassCard className="p-6">
         <h2 className="font-display text-xl mb-4">Activity · last 12 weeks</h2>
         <div className="grid grid-flow-col grid-rows-7 gap-1 overflow-x-auto">
-          {days.map((d) => (
-            <div key={d.key} className="w-3 h-3 rounded-sm"
-              style={{ background: d.active ? "hsl(152 80% 55%)" : "hsl(240 15% 14%)" }}
-              title={d.key} />
-          ))}
+          {days.map((d) => {
+            // Color intensity based on XP earned: 0=grey, 1-49=light, 50-99=mid, 100+=bright
+            const bg = d.xp === 0
+              ? "hsl(240 15% 14%)"
+              : d.xp < 50
+              ? "hsl(152 60% 35%)"
+              : d.xp < 100
+              ? "hsl(152 70% 45%)"
+              : "hsl(152 80% 55%)";
+            return (
+              <div key={d.key} className="w-3 h-3 rounded-sm"
+                style={{ background: bg }}
+                title={d.xp > 0 ? `${d.key} · ${d.xp} XP` : d.key} />
+            );
+          })}
         </div>
       </GlassCard>
 
