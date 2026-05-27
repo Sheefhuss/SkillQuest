@@ -15,6 +15,14 @@ const IDIOM_HINTS = {
 const TEXT_LANGUAGES = ["html", "sql", "docker", "text"];
 const evalCache = new Map();
 
+const CHALLENGE_XP = {
+  beginner:     30,
+  easy:         40,
+  intermediate: 60,
+  hard:         90,
+  expert:       120,
+};
+
 function isValidSubmission(code, language) {
   if (TEXT_LANGUAGES.includes(language)) return code.trim().length > 20;
   return code.trim().length > 20 && /[=(){};:\[\]]/.test(code);
@@ -112,9 +120,9 @@ async function evaluateLevelChallenge(code, prompt, language = "javascript") {
     );
 
     const final = {
-      passed: parsed.passed === true,
-      feedback: parsed.feedback || "Evaluated.",
-      score: parsed.score || 0,
+      passed:    parsed.passed === true,
+      feedback:  parsed.feedback || "Evaluated.",
+      score:     parsed.score || 0,
       testCases: Array.isArray(parsed.testCases) ? parsed.testCases : [],
     };
 
@@ -124,9 +132,9 @@ async function evaluateLevelChallenge(code, prompt, language = "javascript") {
   } catch {
     const looksGood = code.length > 60;
     return {
-      passed: looksGood,
-      feedback: looksGood ? "Looks like a valid solution!" : "Too short or missing logic.",
-      score: looksGood ? 75 : 0,
+      passed:    looksGood,
+      feedback:  looksGood ? "Looks like a valid solution!" : "Too short or missing logic.",
+      score:     looksGood ? 75 : 0,
       testCases: [],
     };
   }
@@ -136,22 +144,44 @@ function todayUTC() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function updateStreak(user) {
+function computeStreakUpdate(user) {
   const today     = todayUTC();
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const last      = user.last_active_date
-    ? new Date(user.last_active_date).toISOString().slice(0, 10)
+    ? String(user.last_active_date).slice(0, 10)
     : null;
 
-  if (last === today) return {};
+  if (last === today) return {};   // already counted today
 
+  const newStreak = last === yesterday ? (user.streak_days || 0) + 1 : 1;
   return {
-    streak_days:      last === yesterday ? (user.streak_days || 0) + 1 : 1,
+    streak_days:      newStreak,
+    longest_streak:   Math.max(newStreak, user.longest_streak || 0),
     last_active_date: today,
   };
 }
 
-function mountLevelSubmit(app, authenticateToken, User) {
+function xpForLevel(level) {
+  const difficulty = (level.difficulty || "").toLowerCase();
+  return CHALLENGE_XP[difficulty] || 50;
+}
+
+const XP_TIERS = [
+  { min: 0,    tier: "Rookie"   },
+  { min: 200,  tier: "Learner"  },
+  { min: 500,  tier: "Builder"  },
+  { min: 1000, tier: "Expert"   },
+  { min: 2000, tier: "Master"   },
+];
+function tierForXp(xp) {
+  let result = XP_TIERS[0].tier;
+  for (const { min, tier } of XP_TIERS) {
+    if (xp >= min) result = tier;
+  }
+  return result;
+}
+
+function mountLevelSubmit(app, authenticateToken, User, _awardXP) {
   app.post("/api/levels/:id/submit", authenticateToken, async (req, res) => {
     try {
       const { code, language = "javascript" } = req.body;
@@ -167,31 +197,49 @@ function mountLevelSubmit(app, authenticateToken, User) {
         language
       );
 
+      const user = await User.findByPk(req.user.id);
+      if (!user) return res.status(404).json({ message: "User not found." });
+
+      const levelId      = Number(req.params.id);
+      const alreadySolved = Array.isArray(user.completed_levels) &&
+        user.completed_levels.map(Number).includes(levelId);
+
+    
+      const streakUpdate = computeStreakUpdate(user);
+      const baseUpdate   = {
+        challenges_attempted: (user.challenges_attempted || 0) + 1,
+        ...streakUpdate,
+      };
+
       let xp_earned = 0;
 
       if (passed) {
-        const user = await User.findByPk(req.user.id);
-        if (user) {
-          const levelId = Number(req.params.id);
-          const alreadySolved = Array.isArray(user.completed_levels) &&
-            user.completed_levels.map(Number).includes(levelId);
+        baseUpdate.challenges_passed = (user.challenges_passed || 0) + 1;
 
-          const streakUpdate = updateStreak(user);
+        if (!alreadySolved) {
+          
+          xp_earned = xpForLevel(level);
+          const newXp  = (user.xp || 0) + xp_earned;
+          const newTier = tierForXp(newXp);
+          const today   = todayUTC();
 
-          if (!alreadySolved) {
-            const updatedCompleted = [...(user.completed_levels || []).map(Number), levelId];
-            await user.update({
-              xp:               (user.xp || 0) + 50,
-              problems_solved:  (user.problems_solved || 0) + 1,
-              completed_levels: updatedCompleted,
-              ...streakUpdate,
-            });
-            xp_earned = 50;
-          } else if (Object.keys(streakUpdate).length) {
-            await user.update(streakUpdate);
+          Object.assign(baseUpdate, {
+            xp:                      newXp,
+            total_xp_earned:         (user.total_xp_earned || 0) + xp_earned,
+            problems_solved:         (user.problems_solved  || 0) + 1,
+            completed_levels:        [...(user.completed_levels || []).map(Number), levelId],
+            last_completed_level_id:   levelId,
+            last_completed_level_date: today,
+          });
+
+          if (newTier !== user.level_tier) {
+            baseUpdate.level_tier          = newTier;
+            baseUpdate.last_tier_change_date = today;
           }
         }
       }
+
+      await user.update(baseUpdate);
 
       res.json({ passed, feedback, score, xp_earned, testCases });
     } catch (err) {
@@ -201,4 +249,4 @@ function mountLevelSubmit(app, authenticateToken, User) {
   });
 }
 
-module.exports = { mountLevelSubmit };
+module.exports = { mountLevelSubmit, computeStreakUpdate };
