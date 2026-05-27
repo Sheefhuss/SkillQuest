@@ -65,7 +65,6 @@ const User = sequelize.define('User', {
     comment: 'Date (YYYY-MM-DD) when level_tier last changed — useful for profile milestones',
   },
 
-  // ── Level / Track progress ────────────────────────────────────────────────
   last_completed_level_id: {
     type: DataTypes.INTEGER,
     defaultValue: null,
@@ -102,7 +101,7 @@ const User = sequelize.define('User', {
     comment: 'Sum of all quiz scores — divide by quiz_attempts for average',
   },
 
-  // ── Mock test stats ───────────────────────────────────────────────────────
+
   mock_tests_taken: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
@@ -117,6 +116,11 @@ const User = sequelize.define('User', {
     defaultValue: 0,
   },
 
+  activity_log: {
+  type: DataTypes.JSONB,
+  defaultValue: [],
+},
+  
   is_pro: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
