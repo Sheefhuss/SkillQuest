@@ -45,9 +45,78 @@ const User = sequelize.define('User', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
+  longest_streak: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'All-time highest streak ever reached',
+  },
   last_active_date: {
     type: DataTypes.STRING,
   },
+
+  total_xp_earned: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Cumulative XP ever earned (xp can be reset for seasons; this never resets)',
+  },
+  last_tier_change_date: {
+    type: DataTypes.STRING,
+    defaultValue: null,
+    comment: 'Date (YYYY-MM-DD) when level_tier last changed — useful for profile milestones',
+  },
+
+  // ── Level / Track progress ────────────────────────────────────────────────
+  last_completed_level_id: {
+    type: DataTypes.INTEGER,
+    defaultValue: null,
+    comment: 'ID of the most recently completed level',
+  },
+  last_completed_level_date: {
+    type: DataTypes.STRING,
+    defaultValue: null,
+    comment: 'Date (YYYY-MM-DD) of last level completion',
+  },
+  completed_tracks: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    comment: 'Array of track slugs where every level is completed',
+  },
+
+  challenges_passed: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Total number of coding challenges passed (passed=true)',
+  },
+  challenges_attempted: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Total submissions attempted (including failures)',
+  },
+  quiz_attempts: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  quiz_score_total: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Sum of all quiz scores — divide by quiz_attempts for average',
+  },
+
+  // ── Mock test stats ───────────────────────────────────────────────────────
+  mock_tests_taken: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  mock_test_score_total: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Sum of all mock test scores — divide by mock_tests_taken for average',
+  },
+  mock_test_best_score: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+
   is_pro: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
