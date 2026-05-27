@@ -67,8 +67,8 @@ export default function Missions() {
 
   const { data: submissions = [] } = useQuery({
     enabled: !!me && isPro,
-    queryKey: ["submissions", me?.email],
-    queryFn: () => apiClient.get(`/submissions?user_email=${me?.email}`),
+    queryKey: ["submissions"],
+    queryFn: () => apiClient.get(`/submissions`),
   });
 
   const current = missions[0];
@@ -105,11 +105,14 @@ export default function Missions() {
       })
       .then(async () => {
         if (allDone && !current.completed) {
+          // Award XP properly via award-xp (updates tier, streak, activity log)
+          await apiClient.post("/users/me/award-xp", {
+            amount: current.xp_reward,
+            activity: `mission_${current.id}`,
+          });
+          // Badges are in ALLOWED_PROFILE_FIELDS so patch is fine for this
           await apiClient.patch("/users/me", {
-            xp: (me.xp || 0) + current.xp_reward,
-            badges: [
-              ...new Set([...(me.badges || []), "mission_complete"]),
-            ],
+            badges: [...new Set([...(me.badges || []), "mission_complete"])],
           });
           toast.success(`Mission complete! +${current.xp_reward} XP 🎉`);
         }
