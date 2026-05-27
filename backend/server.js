@@ -16,7 +16,7 @@ const FeedPost = require('./models/FeedPost');
 const Follow = require('./models/Follow');
 const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
-const XpEvent  = require('./models/XpEvent');    // idempotency log for XP awards
+const XpEvent  = require('./models/XpEvent');    
 const { mountLevelSubmit, computeStreakUpdate } = require('./utils/levelSubmit');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('./utils/emailService');
 
