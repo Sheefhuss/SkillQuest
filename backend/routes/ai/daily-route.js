@@ -5,6 +5,8 @@ const DailyChallenge = require("../../models/DailyChallenge");
 const Submission = require("../../models/Submission");
 const User = require("../../models/User");
 const jwt = require("jsonwebtoken");
+const sequelize = require("../../config/database");
+const { computeStreakUpdate } = require("../../utils/levelSubmit");
 
 const JWT_SECRET = process.env.JWT_SECRET || "skillquest_secret_key";
 const today = () => new Date().toISOString().split("T")[0];
@@ -13,6 +15,60 @@ function getUser(req) {
   const token = req.headers["authorization"]?.split(" ")[1];
   if (!token) return null;
   try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
+}
+
+const XP_TIERS = [
+  { min: 0,    tier: "Rookie"  },
+  { min: 200,  tier: "Learner" },
+  { min: 500,  tier: "Builder" },
+  { min: 1000, tier: "Expert"  },
+  { min: 2000, tier: "Master"  },
+];
+
+function tierForXp(xp) {
+  let result = XP_TIERS[0].tier;
+  for (const { min, tier } of XP_TIERS) {
+    if (xp >= min) result = tier;
+  }
+  return result;
+}
+
+async function awardXP(userId, amount, countsProblem = false) {
+  if (!amount || amount <= 0) return;
+  const inc = {
+    xp:              sequelize.literal(`xp + ${Number(amount)}`),
+    total_xp_earned: sequelize.literal(`total_xp_earned + ${Number(amount)}`),
+  };
+  if (countsProblem) inc.problems_solved = sequelize.literal("problems_solved + 1");
+  await User.update(inc, { where: { id: userId } });
+
+  const user = await User.findByPk(userId, { attributes: ["xp", "level_tier"] });
+  if (user) {
+    const newTier = tierForXp(user.xp);
+    const tierUpdate = { level_tier: newTier };
+    if (newTier !== user.level_tier)
+      tierUpdate.last_tier_change_date = new Date().toISOString().slice(0, 10);
+    await User.update(tierUpdate, { where: { id: userId } });
+  }
+}
+
+async function logActivity(userId, action, xp = 0) {
+  const user = await User.findByPk(userId, { attributes: ["activity_log"] });
+  if (!user) return;
+  const date     = today();
+  const existing = Array.isArray(user.activity_log) ? user.activity_log : [];
+  const idx      = existing.findIndex(e => e.date === date && e.action === action);
+  if (idx >= 0) {
+    existing[idx].xp    = (existing[idx].xp    || 0) + xp;
+    existing[idx].count = (existing[idx].count  || 1) + 1;
+  } else {
+    existing.push({ date, action, xp, count: 1 });
+  }
+  const cutoff = new Date(Date.now() - 84 * 86400000).toISOString().slice(0, 10);
+  await User.update(
+    { activity_log: existing.filter(e => e.date >= cutoff) },
+    { where: { id: userId } }
+  );
 }
 
 const DAILY_POOL = [
@@ -214,11 +270,15 @@ router.post("/daily/submit", async (req, res) => {
           newBadges.push("speed_coder");
         if ((user.problems_solved || 0) + 1 >= 100 && !newBadges.includes("hundred_club"))
           newBadges.push("hundred_club");
-        await user.update({
-          xp: (user.xp || 0) + xpEarned,
-          problems_solved: (user.problems_solved || 0) + 1,
-          badges: newBadges,
-        });
+        if (newBadges.length !== (user.badges || []).length)
+          await User.update({ badges: newBadges }, { where: { id: user.id } });
+
+        await awardXP(user.id, xpEarned, true);
+        await logActivity(user.id, "daily_challenge", xpEarned);
+
+        const freshUser = await User.findByPk(user.id);
+        const streakUpdate = computeStreakUpdate(freshUser);
+        if (Object.keys(streakUpdate).length) await freshUser.update(streakUpdate);
       }
     }
 
