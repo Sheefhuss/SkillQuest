@@ -161,11 +161,13 @@ function computeStreakUpdate(user) {
   };
 }
 
+// XP per level difficulty, falls back to 50 for unlabelled levels
 function xpForLevel(level) {
   const difficulty = (level.difficulty || "").toLowerCase();
   return CHALLENGE_XP[difficulty] || 50;
 }
 
+// Tier thresholds — must match server.js XP_TIERS
 const XP_TIERS = [
   { min: 0,    tier: "Rookie"   },
   { min: 200,  tier: "Learner"  },
@@ -179,6 +181,28 @@ function tierForXp(xp) {
     if (xp >= min) result = tier;
   }
   return result;
+}
+async function logActivity(User, userId, action, xp = 0) {
+  try {
+    const user = await User.findByPk(userId, { attributes: ['activity_log'] });
+    if (!user) return;
+    const today    = new Date().toISOString().slice(0, 10);
+    const existing = Array.isArray(user.activity_log) ? user.activity_log : [];
+    const idx      = existing.findIndex(e => e.date === today && e.action === action);
+    if (idx >= 0) {
+      existing[idx].xp    = (existing[idx].xp    || 0) + xp;
+      existing[idx].count = (existing[idx].count  || 1) + 1;
+    } else {
+      existing.push({ date: today, action, xp, count: 1 });
+    }
+    const cutoff = new Date(Date.now() - 84 * 86400000).toISOString().slice(0, 10);
+    await User.update(
+      { activity_log: existing.filter(e => e.date >= cutoff) },
+      { where: { id: userId } }
+    );
+  } catch (e) {
+    console.error('logActivity error:', e?.message);
+  }
 }
 
 function mountLevelSubmit(app, authenticateToken, User, _awardXP) {
@@ -204,7 +228,6 @@ function mountLevelSubmit(app, authenticateToken, User, _awardXP) {
       const alreadySolved = Array.isArray(user.completed_levels) &&
         user.completed_levels.map(Number).includes(levelId);
 
-    
       const streakUpdate = computeStreakUpdate(user);
       const baseUpdate   = {
         challenges_attempted: (user.challenges_attempted || 0) + 1,
@@ -217,7 +240,6 @@ function mountLevelSubmit(app, authenticateToken, User, _awardXP) {
         baseUpdate.challenges_passed = (user.challenges_passed || 0) + 1;
 
         if (!alreadySolved) {
-          
           xp_earned = xpForLevel(level);
           const newXp  = (user.xp || 0) + xp_earned;
           const newTier = tierForXp(newXp);
@@ -240,6 +262,7 @@ function mountLevelSubmit(app, authenticateToken, User, _awardXP) {
       }
 
       await user.update(baseUpdate);
+      await logActivity(User, req.user.id, passed ? 'challenge' : 'attempt', xp_earned);
 
       res.json({ passed, feedback, score, xp_earned, testCases });
     } catch (err) {
