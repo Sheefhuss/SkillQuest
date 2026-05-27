@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { apiClient } from "@/api/apiClient";
 import { useAuth } from '@/lib/AuthContext';
@@ -27,9 +27,7 @@ const NAV = [
 export default function AppLayout() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
-  const qc = useQueryClient();
   const { logout } = useAuth();
-  const hasProcessedStreak = useRef(false);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -37,33 +35,6 @@ export default function AppLayout() {
   });
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
-
-  useEffect(() => {
-    if (!me || hasProcessedStreak.current) return;
-
-    const today = new Date().toISOString().split("T")[0];
-    const activity = me.activity_log || [];
-
-    if (activity.includes(today)) {
-      hasProcessedStreak.current = true;
-      return;
-    }
-    
-    hasProcessedStreak.current = true; 
-
-    const last = me.last_active_date;
-    const isConsecutive = last && (new Date(today) - new Date(last)) / 86400000 === 1;
-    const newStreak = isConsecutive ? (me.streak_days || 0) + 1 : 1;
-    
-    apiClient.patch('/auth/me', {
-      activity_log: [...activity, today],
-      last_active_date: today,
-      streak_days: newStreak,
-      xp: (me.xp || 0) + 5,
-    }).then(() => {
-      qc.invalidateQueries({ queryKey: ["me"] });
-    });
-  }, [me, qc]);
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -75,9 +46,9 @@ export default function AppLayout() {
           ))}
         </nav>
         <div className="mt-auto pt-4 border-t border-border/60">
-          <Button 
-            variant="ghost" 
-            onClick={logout} 
+          <Button
+            variant="ghost"
+            onClick={logout}
             className="w-full justify-start text-muted-foreground hover:text-red-400 group mb-2"
           >
             <LogOut className="w-4 h-4 mr-3" />
@@ -117,9 +88,9 @@ export default function AppLayout() {
                 {NAV.map((n) => <NavItem key={n.to} {...n} />)}
               </nav>
               <div className="mt-auto pt-4 border-t border-border/60">
-                <Button 
-                  variant="ghost" 
-                  onClick={logout} 
+                <Button
+                  variant="ghost"
+                  onClick={logout}
                   className="w-full justify-start text-muted-foreground hover:text-red-400 group mb-2"
                 >
                   <LogOut className="w-4 h-4 mr-3" />
