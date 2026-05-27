@@ -1,12 +1,3 @@
-// models/XpEvent.js
-// One row per (user, level, activity) — used as an idempotency key so the
-// same XP event can never be awarded twice, even across page reloads or
-// concurrent requests.
-//
-// Activities:  'lesson' | 'quiz' | 'level_complete'
-// (Challenge XP is handled by levelSubmit.js which already deduplicates
-//  via the Submission table — no XpEvent row is needed there.)
-
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -25,7 +16,7 @@ const XpEvent = sequelize.define('XpEvent', {
     allowNull: false,
   },
   activity: {
-    type: DataTypes.STRING(32),   // 'lesson' | 'quiz' | 'level_complete'
+    type: DataTypes.STRING(32),   
     allowNull: false,
   },
 }, {
