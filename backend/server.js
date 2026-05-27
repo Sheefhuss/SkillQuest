@@ -16,7 +16,7 @@ const FeedPost = require('./models/FeedPost');
 const Follow = require('./models/Follow');
 const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
-const XpEvent  = require('./models/XpEvent');   
+const XpEvent  = require('./models/XpEvent');    // idempotency log for XP awards
 const { mountLevelSubmit, computeStreakUpdate } = require('./utils/levelSubmit');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('./utils/emailService');
 
@@ -282,8 +282,24 @@ async function awardXP(userId, amount, countsProblem = false) {
     await User.update(tierUpdate, { where: { id: userId } });
   }
 }
-
-// updateStreak lives in utils/levelSubmit.js (computeStreakUpdate) — imported above
+async function logActivity(userId, action, xp = 0) {
+  const user = await User.findByPk(userId, { attributes: ['activity_log'] });
+  if (!user) return;
+  const today    = new Date().toISOString().slice(0, 10);
+  const existing = Array.isArray(user.activity_log) ? user.activity_log : [];
+  const idx      = existing.findIndex(e => e.date === today && e.action === action);
+  if (idx >= 0) {
+    existing[idx].xp    = (existing[idx].xp    || 0) + xp;
+    existing[idx].count = (existing[idx].count  || 1) + 1;
+  } else {
+    existing.push({ date: today, action, xp, count: 1 });
+  }
+  const cutoff = new Date(Date.now() - 84 * 86400000).toISOString().slice(0, 10);
+  await User.update(
+    { activity_log: existing.filter(e => e.date >= cutoff) },
+    { where: { id: userId } }
+  );
+}
 
 app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) => {
   try {
@@ -294,7 +310,6 @@ app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res)
     if (Object.keys(updates).length === 0) return res.status(400).json({ message: 'Nothing to update' });
     await User.update(updates, { where: { id: req.user.id } });
 
-    // Any profile save counts as activity today — update streak server-side
     const freshUser = await User.findByPk(req.user.id);
     if (freshUser) {
       const streakUpdate = computeStreakUpdate(freshUser);
@@ -331,6 +346,8 @@ app.post('/api/users/me/award-xp', authenticateToken, async (req, res) => {
     }
 
     await awardXP(userId, amount, countsProblem);
+    await logActivity(userId, activity || 'xp', amount);
+
     const freshUser = await User.findByPk(userId);
     if (freshUser) {
       const streakUpdate = computeStreakUpdate(freshUser);
@@ -406,6 +423,7 @@ app.get('/api/levels/:id', async (req, res) => {
 app.get('/api/submissions', authenticateToken, async (req, res) => {
   try {
     const allowed = ['level_id', 'track_slug'];
+    // Always scope to the authenticated user — never allow filtering by another user's email
     const where = { user_email: req.user.email };
     for (const key of allowed) {
       if (req.query[key]) where[key] = req.query[key];
@@ -418,6 +436,7 @@ app.get('/api/submissions', authenticateToken, async (req, res) => {
 
 app.post('/api/submissions', authenticateToken, async (req, res) => {
   try {
+    // Strip any attempt to override user_email from the body
     const { code, user_email, ...safeBody } = req.body;
     res.json(await Submission.create({ ...safeBody, user_email: req.user.email }));
   } catch (err) {
@@ -507,8 +526,6 @@ app.patch('/api/missions/:id', authenticateToken, async (req, res) => {
 app.post('/api/mocktests', authenticateToken, async (req, res) => {
   try {
     const test = await MockTest.create({ ...req.body, user_email: req.user.email });
-
-    // Record mock test stats in the user row for profile display
     const score = typeof req.body.score === 'number' ? req.body.score : null;
     if (score !== null) {
       const user = await User.findByPk(req.user.id);
@@ -523,6 +540,7 @@ app.post('/api/mocktests', authenticateToken, async (req, res) => {
           mock_test_best_score:  newBest,
           ...streakUpdate,
         });
+        await logActivity(req.user.id, 'mocktest', 0);
       }
     }
 
