@@ -16,8 +16,8 @@ const FeedPost = require('./models/FeedPost');
 const Follow = require('./models/Follow');
 const Mission = require('./models/Mission');
 const MockTest = require('./models/MockTest');
-const XpEvent  = require('./models/XpEvent');    // idempotency log for XP awards
-const { mountLevelSubmit } = require('./utils/levelSubmit');
+const XpEvent  = require('./models/XpEvent');   
+const { mountLevelSubmit, computeStreakUpdate } = require('./utils/levelSubmit');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('./utils/emailService');
 
 const app = express();
@@ -241,7 +241,7 @@ app.get(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) =
 const ALLOWED_PROFILE_FIELDS = [
   'display_name', 'bio', 'badges', 'is_pro',
   'ai_tutor_uses_today', 'ai_tutor_date',
-  'completed_levels', 'streak_days', 'last_active_date',
+  'completed_levels',
 ];
 
 const XP_TIERS = [
@@ -263,18 +263,27 @@ function tierForXp(xp) {
 async function awardXP(userId, amount, countsProblem = false) {
   if (!amount || amount <= 0) return;
 
-  const incrementFields = { xp: sequelize.literal(`xp + ${Number(amount)}`) };
+  const incrementFields = {
+    xp:              sequelize.literal(`xp + ${Number(amount)}`),
+    total_xp_earned: sequelize.literal(`total_xp_earned + ${Number(amount)}`),
+  };
   if (countsProblem) {
     incrementFields.problems_solved = sequelize.literal('problems_solved + 1');
   }
   await User.update(incrementFields, { where: { id: userId } });
 
-  const user = await User.findByPk(userId, { attributes: ['xp'] });
+  const user = await User.findByPk(userId, { attributes: ['xp', 'level_tier'] });
   if (user) {
     const newTier = tierForXp(user.xp);
-    await User.update({ level_tier: newTier }, { where: { id: userId } });
+    const tierUpdate = { level_tier: newTier };
+    if (newTier !== user.level_tier) {
+      tierUpdate.last_tier_change_date = new Date().toISOString().slice(0, 10);
+    }
+    await User.update(tierUpdate, { where: { id: userId } });
   }
 }
+
+// updateStreak lives in utils/levelSubmit.js (computeStreakUpdate) — imported above
 
 app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res) => {
   try {
@@ -284,6 +293,16 @@ app.patch(['/api/auth/me', '/api/users/me'], authenticateToken, async (req, res)
     }
     if (Object.keys(updates).length === 0) return res.status(400).json({ message: 'Nothing to update' });
     await User.update(updates, { where: { id: req.user.id } });
+
+    // Any profile save counts as activity today — update streak server-side
+    const freshUser = await User.findByPk(req.user.id);
+    if (freshUser) {
+      const streakUpdate = computeStreakUpdate(freshUser);
+      if (Object.keys(streakUpdate).length) {
+        await freshUser.update(streakUpdate);
+      }
+    }
+
     res.json(await User.findByPk(req.user.id));
   } catch (err) {
     res.status(500).json({ message: 'Update failed' });
@@ -296,21 +315,31 @@ app.post('/api/users/me/award-xp', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'Invalid XP amount' });
     }
 
+    const userId    = req.user.id;
     const levelId   = req.body.level_id  ? parseInt(req.body.level_id, 10) : null;
-    const activity  = req.body.activity  || null;   
+    const activity  = req.body.activity  || null;
     const countsProblem = req.body.counts_problem === true;
+
     if (levelId && activity) {
-      const [event, created] = await XpEvent.findOrCreate({
-        where: { user_id: req.user.id, level_id: levelId, activity },
-        defaults: { user_id: req.user.id, level_id: levelId, activity },
+      const [, created] = await XpEvent.findOrCreate({
+        where: { user_id: userId, level_id: levelId, activity },
+        defaults: { user_id: userId, level_id: levelId, activity },
       });
       if (!created) {
-        return res.json({ awarded: false, user: await User.findByPk(req.user.id) });
+        return res.json({ awarded: false, user: await User.findByPk(userId) });
       }
     }
 
-    await awardXP(req.user.id, amount, countsProblem);
-    res.json({ awarded: true, user: await User.findByPk(req.user.id) });
+    await awardXP(userId, amount, countsProblem);
+    const freshUser = await User.findByPk(userId);
+    if (freshUser) {
+      const streakUpdate = computeStreakUpdate(freshUser);
+      if (Object.keys(streakUpdate).length) {
+        await freshUser.update(streakUpdate);
+      }
+    }
+
+    res.json({ awarded: true, user: await User.findByPk(userId) });
   } catch (err) {
     console.error('Award XP error:', err);
     res.status(500).json({ message: 'Failed to award XP' });
@@ -377,7 +406,7 @@ app.get('/api/levels/:id', async (req, res) => {
 app.get('/api/submissions', authenticateToken, async (req, res) => {
   try {
     const allowed = ['level_id', 'track_slug'];
-    const where = { user_email: req.user.email }; // always scope to the authed user
+    const where = { user_email: req.user.email };
     for (const key of allowed) {
       if (req.query[key]) where[key] = req.query[key];
     }
@@ -389,7 +418,7 @@ app.get('/api/submissions', authenticateToken, async (req, res) => {
 
 app.post('/api/submissions', authenticateToken, async (req, res) => {
   try {
-    const { code, ...safeBody } = req.body;
+    const { code, user_email, ...safeBody } = req.body;
     res.json(await Submission.create({ ...safeBody, user_email: req.user.email }));
   } catch (err) {
     res.status(500).json({ message: 'Error saving submission' });
@@ -477,7 +506,27 @@ app.patch('/api/missions/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/mocktests', authenticateToken, async (req, res) => {
   try {
-    res.json(await MockTest.create({ ...req.body, user_email: req.user.email }));
+    const test = await MockTest.create({ ...req.body, user_email: req.user.email });
+
+    // Record mock test stats in the user row for profile display
+    const score = typeof req.body.score === 'number' ? req.body.score : null;
+    if (score !== null) {
+      const user = await User.findByPk(req.user.id);
+      if (user) {
+        const newTotal = (user.mock_tests_taken || 0) + 1;
+        const newScoreTotal = (user.mock_test_score_total || 0) + score;
+        const newBest = Math.max(user.mock_test_best_score || 0, score);
+        const streakUpdate = computeStreakUpdate(user);
+        await user.update({
+          mock_tests_taken:      newTotal,
+          mock_test_score_total: newScoreTotal,
+          mock_test_best_score:  newBest,
+          ...streakUpdate,
+        });
+      }
+    }
+
+    res.json(test);
   } catch (err) {
     res.status(500).json({ message: 'Error saving mock test' });
   }
